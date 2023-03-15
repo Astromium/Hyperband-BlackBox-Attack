@@ -14,6 +14,7 @@ from constraints.relation_constraint import AndConstraint
 from sklearn.pipeline import Pipeline
 import timeit
 import joblib
+import pickle
 tf.compat.v1.disable_eager_execution()
 
 df = pd.read_csv('./ressources/url.csv')
@@ -59,12 +60,15 @@ executor = NumpyConstraintsExecutor(AndConstraint(constraints))
 # Parameters for Hyperband
 dimensions = X_test.shape[1]
 BATCH_SIZE = 200
-eps = 0.3
-url_evaluator = TfEvaluator(constraints=constraints, scaler=scaler)
+eps = 0.2
 sampler = Sampler()
 distance = 'inf'
 success_rates_l2 = []
 exec_times_l2 = []
+
+alphas = [0.8, 0.6, 0.4, 0.2]
+betas = [0.2, 0.4, 0.6, 0.8]
+history_dict = dict()
 
 
 
@@ -98,28 +102,34 @@ if __name__ == '__main__':
     args_correct = (preds == y_clean[:BATCH_SIZE]).astype('int')
     x_correct, y_correct = x_clean[args_correct], y_clean[args_correct]
         
+    for _, (alpha, beta) in enumerate(zip(alphas, betas)):
+        url_evaluator = TfEvaluator(constraints=constraints, scaler=scaler, alpha=alpha, beta=beta)
+        scores, configs, candidates = [], [], []
+        start = timeit.default_timer()
+        for i in range(BATCH_SIZE):
+            hp = Hyperband(objective=url_evaluator, classifier=model, x=x_clean[i], y=y_clean[i], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=81, downsample=3, distance=distance)
+            all_scrores, all_configs, all_candidates = hp.generate(mutables=None, features_min_max=(0,1))
+
+            scores.append(all_scrores)
+            configs.append(all_configs)
+            candidates.append(all_candidates)
+
+        end = timeit.default_timer()
+        success_rate_calculator = TfCalculator(classifier=model, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates)
+        success_rate, adversarials = success_rate_calculator.evaluate()
+        adversarials = scaler.inverse_transform(np.array(adversarials))
+        #print(f'\n Execution Time {round((end - start) / 60, 3)}\n')
+        #print(f'Success rate over {BATCH_SIZE} examples (M) : {success_rate * 100}')
+        #print(f'len adversarials {len(adversarials)}')
+        violations = np.array([executor.execute(adv[np.newaxis, :])[0] for adv in adversarials])
+        tolerance = 0.0001
+        satisfaction = round(((violations > tolerance).astype('int').sum() / len(adversarials)) * 100, 3)
+        #print(f'Constraints satisfaction (C&M) {(success_rate * 100) - satisfaction}')
+        history_dict[(alpha, beta)] = {'M': round(success_rate * 100, 2), 'C&M': round(success_rate * 100 - satisfaction, 2), 'Execution time': round((end - start) / 60, 3)}
     
-    scores, configs, candidates = [], [], []
-    start = timeit.default_timer()
-    for i in range(BATCH_SIZE):
-        hp = Hyperband(objective=url_evaluator, classifier=model, x=x_clean[i], y=y_clean[i], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=81, downsample=3, distance=distance)
-        all_scrores, all_configs, all_candidates = hp.generate(mutables=None, features_min_max=(0,1))
-
-        scores.append(all_scrores)
-        configs.append(all_configs)
-        candidates.append(all_candidates)
-
-    end = timeit.default_timer()
-    success_rate_calculator = TfCalculator(classifier=model, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates)
-    success_rate, adversarials = success_rate_calculator.evaluate()
-    adversarials = scaler.inverse_transform(np.array(adversarials))
-    print(f'\n Execution Time {round((end - start) / 60, 3)}\n')
-    print(f'Success rate over {BATCH_SIZE} examples (M) : {success_rate * 100}')
-    print(f'len adversarials {len(adversarials)}')
-    violations = np.array([executor.execute(adv[np.newaxis, :])[0] for adv in adversarials])
-    tolerance = 0.0001
-    satisfaction = round(((violations > tolerance).astype('int').sum() / len(adversarials)) * 100, 3)
-    print(f'Constraints satisfaction (C&M) {(success_rate * 100) - satisfaction}')
+    print(f'History {history_dict}')
+    with open('history.pkl', 'wb') as f:
+        pickle.dump(history_dict, f)
     
     #scores = softmax(model.predict(np.array(adversarials)), axis=1)
     #print(f'scores {scores}')
