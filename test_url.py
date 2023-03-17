@@ -62,12 +62,12 @@ dimensions = X_test.shape[1]
 BATCH_SIZE = 200
 eps = 0.2
 sampler = Sampler()
-distance = 'inf'
+distance = 'l2'
 success_rates_l2 = []
 exec_times_l2 = []
 
-alphas = [0.8, 0.6, 0.4, 0.2]
-betas = [0.2, 0.4, 0.6, 0.8]
+alphas = [0.8, 0.6, 0.5, 0.4, 0.2]
+betas = [0.2, 0.4, 0.5, 0.6, 0.8]
 history_dict = dict()
 
 
@@ -118,14 +118,14 @@ if __name__ == '__main__':
         success_rate_calculator = TfCalculator(classifier=model, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates)
         success_rate, adversarials = success_rate_calculator.evaluate()
         adversarials = scaler.inverse_transform(np.array(adversarials))
-        #print(f'\n Execution Time {round((end - start) / 60, 3)}\n')
-        #print(f'Success rate over {BATCH_SIZE} examples (M) : {success_rate * 100}')
-        #print(f'len adversarials {len(adversarials)}')
+        print(f'\n Execution Time {round((end - start) / 60, 3)}\n')
+        print(f'Success rate over {BATCH_SIZE} examples (M) : {success_rate * 100}')
+        print(f'len adversarials {len(adversarials)}')
         violations = np.array([executor.execute(adv[np.newaxis, :])[0] for adv in adversarials])
         tolerance = 0.0001
-        satisfaction = round(((violations > tolerance).astype('int').sum() / len(adversarials)) * 100, 3)
-        #print(f'Constraints satisfaction (C&M) {(success_rate * 100) - satisfaction}')
-        history_dict[(alpha, beta)] = {'M': round(success_rate * 100, 2), 'C&M': round(success_rate * 100 - satisfaction, 2), 'Execution time': round((end - start) / 60, 3)}
+        satisfaction = (violations < tolerance).astype('int').sum()
+        print(f'Constraints satisfaction (C&M) {round(satisfaction * 100) / len(adversarials), 2}')
+        history_dict[(alpha, beta)] = {'M': round(success_rate * 100, 2), 'C&M': round((satisfaction * 100) / BATCH_SIZE, 2), 'Execution time': round((end - start) / 60, 3)}
     
     print(f'History {history_dict}')
     with open('history.pkl', 'wb') as f:
