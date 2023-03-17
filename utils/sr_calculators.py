@@ -26,6 +26,7 @@ class TfCalculator(SuccessRateCalculator):
         correct = 0
         success_rate = 0
         adversarials = []
+        best_candidates = []
         for i, (x, y) in enumerate(zip(self.data, self.labels)):
             pred = np.argmax(softmax(self.classifier.predict(x[np.newaxis, :])))
             if pred != y:
@@ -36,13 +37,14 @@ class TfCalculator(SuccessRateCalculator):
             best_score_idx = np.argmin(self.scores[i])  
             best_candidate = self.candidates[i][best_score_idx]
             pred = np.argmax(softmax(self.classifier.predict(best_candidate[np.newaxis, :])))
+            best_candidates.append(best_candidate)
 
             if pred != y:
-                adversarials.append(best_candidate)
                 #print(f'adversarial {i}')
+                adversarials.append(best_candidate)
                 success_rate += 1
         eps = 0.0001 if correct == 0 else 0
         
-        return round(success_rate / correct + eps, 3), adversarials
+        return round(success_rate / correct + eps, 3), best_candidates, adversarials
 
 

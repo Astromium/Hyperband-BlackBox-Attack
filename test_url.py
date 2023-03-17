@@ -59,15 +59,14 @@ executor = NumpyConstraintsExecutor(AndConstraint(constraints))
 
 # Parameters for Hyperband
 dimensions = X_test.shape[1]
-BATCH_SIZE = 200
+BATCH_SIZE = 100
 eps = 0.2
 sampler = Sampler()
 distance = 'inf'
 success_rates_l2 = []
 exec_times_l2 = []
 
-alphas = [0.8, 0.6, 0.4, 0.2]
-betas = [0.2, 0.4, 0.6, 0.8]
+R_values = [1024, 512, 256]
 history_dict = dict()
 
 
@@ -102,12 +101,12 @@ if __name__ == '__main__':
     args_correct = (preds == y_clean[:BATCH_SIZE]).astype('int')
     x_correct, y_correct = x_clean[args_correct], y_clean[args_correct]
         
-    for _, (alpha, beta) in enumerate(zip(alphas, betas)):
-        url_evaluator = TfEvaluator(constraints=constraints, scaler=scaler, alpha=alpha, beta=beta)
+    for R in R_values:
+        url_evaluator = TfEvaluator(constraints=constraints, scaler=scaler, alpha=0.5, beta=0.5)
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
         for i in range(BATCH_SIZE):
-            hp = Hyperband(objective=url_evaluator, classifier=model, x=x_clean[i], y=y_clean[i], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=81, downsample=3, distance=distance)
+            hp = Hyperband(objective=url_evaluator, classifier=model, x=x_clean[i], y=y_clean[i], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=2, distance=distance)
             all_scrores, all_configs, all_candidates = hp.generate(mutables=None, features_min_max=(0,1))
 
             scores.append(all_scrores)
@@ -116,16 +115,18 @@ if __name__ == '__main__':
 
         end = timeit.default_timer()
         success_rate_calculator = TfCalculator(classifier=model, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates)
-        success_rate, adversarials = success_rate_calculator.evaluate()
-        adversarials = scaler.inverse_transform(np.array(adversarials))
+        success_rate, best_candidates, adversarials = success_rate_calculator.evaluate()
+        adversarials, best_candidates = scaler.inverse_transform(np.array(adversarials)), scaler.inverse_transform(np.array(best_candidates))
         #print(f'\n Execution Time {round((end - start) / 60, 3)}\n')
         #print(f'Success rate over {BATCH_SIZE} examples (M) : {success_rate * 100}')
         #print(f'len adversarials {len(adversarials)}')
         violations = np.array([executor.execute(adv[np.newaxis, :])[0] for adv in adversarials])
+        violations_candidates = np.array([executor.execute(adv[np.newaxis, :])[0] for adv in best_candidates])
         tolerance = 0.0001
-        satisfaction = round(((violations > tolerance).astype('int').sum() / len(adversarials)) * 100, 3)
+        satisfaction = (violations < tolerance).astype('int').sum()
+        satisfaction_candidates = (violations_candidates < tolerance).astype('int').sum()
         #print(f'Constraints satisfaction (C&M) {(success_rate * 100) - satisfaction}')
-        history_dict[(alpha, beta)] = {'M': round(success_rate * 100, 2), 'C&M': round(success_rate * 100 - satisfaction, 2), 'Execution time': round((end - start) / 60, 3)}
+        history_dict[R] = {'M': round(success_rate * 100, 2), 'C&M': round((satisfaction * 100) / BATCH_SIZE, 2), 'C': round((satisfaction_candidates * 100) / len(best_candidates), 2), 'Execution time': round((end - start) / 60, 3)}
     
     print(f'History {history_dict}')
     with open('history.pkl', 'wb') as f:
