@@ -67,7 +67,7 @@ success_rates_l2 = []
 exec_times_l2 = []
 
 
-R_values = [1024, 512, 256]
+R_values = [1024, 512, 256, 128]
 history_dict = dict()
 
 

@@ -28,6 +28,7 @@ class TfEvaluator(Evaluator):
     
     def evaluate(self, classifier: Any, configuration: tuple, budget: int, x: NDArray, y: int, eps: float, distance: str, features_min_max: Union[tuple, None], generate_perturbation: Callable):
         score = 0.0
+        scores = np.array([])
         adv = np.array(x)
         for _ in range(budget):
             #perturbation = generate_perturbation(shape=np.array(configuration).shape, eps=eps, distance=distance)
@@ -38,12 +39,8 @@ class TfEvaluator(Evaluator):
             norm = 2 if distance == 'l2' else np.inf
             dist = np.linalg.norm(adv - x, ord=norm)
             if dist > eps:
-                if distance == 'inf':
-                    #adv = np.clip(adv, -eps, eps)
-                    adv = x + (adv - x) * eps / dist
-                elif distance == 'l2':
-                    #adv = adv / max(eps, np.linalg.norm(adv))
-                    adv = x + (adv - x) * eps / dist
+                adv = x + (adv - x) * eps / dist
+                    
             # clipping into min-max values
             if features_min_max:
                 adv = np.clip(adv, features_min_max[0], features_min_max[1])
@@ -69,11 +66,11 @@ class SickitEvaluator(Evaluator):
             perturbation = generate_perturbation(shape=np.array(configuration).shape, eps=eps, distance=distance)
             adv[list(configuration)] += perturbation
 
-            #projecting into Lp-ball
-            if distance == 'inf':
-                adv = np.clip(adv, -eps, eps)
-            elif distance == 'l2':
-                adv = adv / max(eps, np.linalg.norm(adv))
+            # projecting into the Lp-ball
+            norm = 2 if distance == 'l2' else np.inf
+            dist = np.linalg.norm(adv - x, ord=norm)
+            if dist > eps:
+                adv = x + (adv - x) * eps / dist
             
             #clipping into min-max feature values
             if features_min_max:
