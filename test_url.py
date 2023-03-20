@@ -62,11 +62,11 @@ dimensions = X_test.shape[1]
 BATCH_SIZE = 100
 eps = 0.2
 sampler = Sampler()
-distance = 'inf'
+distance = 'l2'
 success_rates_l2 = []
 exec_times_l2 = []
 
-R_values = [1024, 512, 256]
+R_values = [256]
 history_dict = dict()
 
 
