@@ -7,9 +7,17 @@ from sampler import Sampler
 from tqdm import tqdm
 from worker import Worker
 from multiprocessing import Lock
+from multiprocessing import Pool
+from joblib import Parallel, delayed
+import os
 import math
 
 lock = Lock()
+
+def run_worker(args):
+    sh = SuccessiveHalving(**args)
+    scores, configurations, candidates = sh.run()
+    return scores, configurations, candidates
 
 @dataclass
 class Hyperband():
@@ -54,14 +62,35 @@ class Hyperband():
             } 
             for i in reversed(range(s_max + 1)) 
         ]
+        
+        '''
+        p = Pool(os.cpu_count())
+        results = p.map(run_worker, params)
+        p.close()
+        p.join()
+        '''
+        results = Parallel(n_jobs=-1)(delayed(run_worker)(params[i]) for i in range(len(params)))
 
+        for (scores, configurations, candidates) in results:
+            all_scores.extend(scores)
+            all_configurations.extend(configurations)
+            all_candidates.extend(candidates)
+        
+        
+
+        
         processes = [Worker(kwargs=params[i]) for i in reversed(range(s_max + 1))]
+        #res = processes[0].run()
+        #res1 = processes[1].run()
+        
+        '''
         for p in processes:
             scores, configurations, candidates = p.run()
             with lock:
                 all_scores.extend(scores)
                 all_configurations.extend(configurations)
                 all_candidates.extend(candidates)    
+        '''
 
         '''
         for i in reversed(range(s_max + 1)):

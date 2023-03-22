@@ -34,8 +34,9 @@ perturbations = [0.05]
 distance = 'inf'
 dimensions = X_test.shape[1]
 sampler = Sampler()
+scaler = MinMaxScaler()
 features_min_max = (0, 1)
-botnet_evaluator = TfEvaluator()
+botnet_evaluator = TfEvaluator(constraints=None, scaler=scaler, alpha=0.5, beta=0.5)
 
 success_rates_l2 = []
 exec_times_l2 = []
@@ -48,7 +49,7 @@ if __name__ == '__main__':
         scores, configs, candidates = [], [], []
 
         for i in range(BATCH_SIZE):
-            hp = Hyperband(objective=botnet_evaluator, classifier=model, x=X_test_botnet[i], y=y_test_botnet[i], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=len(mutables)-1, downsample=3, distance=distance)
+            hp = Hyperband(objective=botnet_evaluator, classifier=model, x=X_test_botnet[i], y=y_test_botnet[i], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=len(mutables)-1, R=81, downsample=3, distance=distance)
             all_scrores, all_configs, all_candidates = hp.generate(mutables=mutables, features_min_max=features_min_max)
 
             scores.append(all_scrores)
