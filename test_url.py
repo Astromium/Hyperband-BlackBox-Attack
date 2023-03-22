@@ -59,14 +59,14 @@ executor = NumpyConstraintsExecutor(AndConstraint(constraints))
 
 # Parameters for Hyperband
 dimensions = X_test.shape[1]
-BATCH_SIZE = 100
+BATCH_SIZE = 1
 eps = 0.2
 sampler = Sampler()
 distance = 'l2'
 success_rates_l2 = []
 exec_times_l2 = []
 
-R_values = [256]
+R_values = [81]
 history_dict = dict()
 
 
