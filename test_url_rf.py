@@ -1,15 +1,11 @@
 import os
-#os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
-import tensorflow as tf
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
 from hyperband import Hyperband
-from evaluators import TfEvaluator
 from sampler import Sampler
-from utils.sr_calculators import TfCalculator
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
+from evaluators import SickitEvaluator
+from utils.sr_calculators import SickitCalculator
 from constraints.constraints_executor import NumpyConstraintsExecutor
 from constraints.url_constraints import get_url_relation_constraints
 from constraints.relation_constraint import AndConstraint
@@ -51,10 +47,10 @@ if __name__ == '__main__':
 
     x_clean = np.load('./ressources/baseline_X_test_candidates.npy')
     y_clean = np.load('./ressources/baseline_y_test_candidates.npy')
-    x_clean = scaler.transform(x_clean)
+    #x_clean = scaler.transform(x_clean)
 
     rf = joblib.load('./ressources/baseline_rf.model')
-    #model_pipeline = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', rf)])
+    model_pipeline = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', rf)])
     metadata = pd.read_csv('./ressources/url_metadata.csv')
     min_constraints = metadata['min'].to_list()[:63]
     max_constraints = metadata['max'].to_list()[:63]
@@ -65,10 +61,10 @@ if __name__ == '__main__':
 
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
-    BATCH_SIZE = 1
+    BATCH_SIZE = 100
     eps = 0.2
     sampler = Sampler()
-    distance = 'l2'
+    distance = 'inf'
     success_rates_l2 = []
     exec_times_l2 = []
 
@@ -104,26 +100,23 @@ if __name__ == '__main__':
     '''
         
     for R in R_values:
-        url_evaluator = TfEvaluator(constraints=constraints, scaler=scaler, alpha=0.5, beta=0.5)
+        url_evaluator = SickitEvaluator(constraints=constraints, scaler=scaler, alpha=0.5, beta=0.5)
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
         for i in range(BATCH_SIZE):
-            hp = Hyperband(objective=url_evaluator, classifier=None, x=x_clean[i], y=y_clean[i], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=3, distance=distance)
+            hp = Hyperband(objective=url_evaluator, classifier=model_pipeline, x=x_clean[i], y=y_clean[i], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=3, distance=distance)
             all_scrores, all_configs, all_candidates = hp.generate(mutables=None, features_min_max=(0,1))
 
             scores.append(all_scrores)
             configs.append(all_configs)
             candidates.append(all_candidates)
-            print(f'all_scores length {all_scrores}')
-            end = timeit.default_timer()
-            print(f'Exec time {round((end - start) / 60, 3)}')
 
         end = timeit.default_timer()
         print(f'Exec time {round((end - start) / 60, 3)}')
-        success_rate_calculator = TfCalculator(classifier=model, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates)
+        success_rate_calculator = SickitCalculator(classifier=model_pipeline, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates)
         success_rate, best_candidates, adversarials = success_rate_calculator.evaluate()
         print(f'success rate {success_rate}, len best_candidates {len(best_candidates)}, len adversarials {len(adversarials)}')
-        adversarials, best_candidates = scaler.inverse_transform(np.array(adversarials)), scaler.inverse_transform(np.array(best_candidates))
+        #adversarials, best_candidates = scaler.inverse_transform(np.array(adversarials)), scaler.inverse_transform(np.array(best_candidates))
         #print(f'\n Execution Time {round((end - start) / 60, 3)}\n')
         #print(f'Success rate over {BATCH_SIZE} examples (M) : {success_rate * 100}')
         #print(f'len adversarials {len(adversarials)}')
