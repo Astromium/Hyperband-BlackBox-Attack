@@ -46,14 +46,14 @@ class TfEvaluator(Evaluator):
             if features_min_max:
                 adv = np.clip(adv, features_min_max[0], features_min_max[1])
 
-            #pred = softmax(classifier.predict(adv[np.newaxis, :]))
+            pred = softmax(classifier.predict(adv[np.newaxis, :]))
             violations = 0.0
             if self.constraints:
                 if self.scaler:
                     adv_rescaled = self.scaler.inverse_transform(np.array(adv)[np.newaxis, :])
                 violations = self.constraint_executor.execute(adv_rescaled)[0]
-            #score = self.alpha * pred[0][y] + self.beta * violations 
-            score = self.alpha + self.beta * violations
+            score = self.alpha * pred[0][y] + self.beta * violations 
+            #score = self.alpha + self.beta * violations
             if score < best_score:
                 best_score = score
                 best_adversarial = adv

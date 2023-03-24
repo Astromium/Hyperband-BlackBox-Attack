@@ -1,6 +1,6 @@
 import os
-#os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
-import tensorflow as tf
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+#import tensorflow as tf
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
@@ -18,10 +18,71 @@ import timeit
 import joblib
 import pickle
 import warnings
+from keras.layers import Input, Dropout, Dense, Activation
+#from tensorflow.keras import Sequential
 #tf.compat.v1.disable_eager_execution()
 #tf.compat.v1.enable_v2_behavior()
 warnings.filterwarnings(action='ignore')
 
+scaler = preprocessing_pipeline = joblib.load('./ressources/baseline_scaler.joblib')
+
+'''
+def create_dnn(units, optimizer, loss):
+    model = Sequential()
+    model.add(Input(shape=(63)))
+    model.add(Dense(units=units[0], activation='relu'))
+    model.add(Dropout(0.1))
+    model.add(Dense(units=units[1], activation='relu'))
+    model.add(Dropout(0.1))
+    model.add(Dense(units=units[2], activation='relu'))
+    model.add(Dense(units=2))
+    model.add(Activation('softmax'))
+    
+    model.compile(optimizer=optimizer, loss=loss, metrics=[tf.keras.metrics.BinaryAccuracy()])
+    return model
+
+opt = tf.keras.optimizers.legacy.Adam()
+loss = tf.keras.losses.CategoricalCrossentropy()
+
+LAYERS = [256, 128, 64]
+model = create_dnn(units=LAYERS, optimizer=opt, loss=loss)
+print(model.summary())
+'''
+
+'''
+
+df = pd.read_csv('./ressources/url.csv')
+y = np.array(df['is_phishing'])
+X = np.array(df[df.columns.drop('is_phishing')])
+
+from sklearn.model_selection import train_test_split
+from tensorflow.keras.utils import to_categorical
+
+merged = np.arange(len(X))
+i_train, i_test = train_test_split(
+        merged,
+        random_state=100,
+        shuffle=True,
+        stratify=y[merged],
+        test_size=0.2,
+)
+i_train, i_val = train_test_split(
+        i_train,
+        random_state=200,
+        shuffle=True,
+        stratify=y[i_train],
+        test_size=0.2,
+)
+
+X = scaler.fit_transform(X)
+X_train, X_test, X_val = X[i_train], X[i_test], X[i_val]
+y_train, y_test, y_val = y[i_train], y[i_test], y[i_val]
+y_train_cat, y_val_cat = to_categorical(y_train), to_categorical(y_val)
+y_test_cat = to_categorical(y_test)
+'''
+
+#history = model.fit(X_train, y_train_cat, epochs=30, validation_data=(X_val, y_val_cat))
+#joblib.dump(model, './ressources/model_url.pkl')
 
 if __name__ == '__main__':
     print(f'Hello {os.getpid()} from test_url')
@@ -39,13 +100,14 @@ if __name__ == '__main__':
     )
 
     #scaler = MinMaxScaler()
-    scaler = preprocessing_pipeline = joblib.load('./ressources/baseline_scaler.joblib')
+    
     X = scaler.transform(X)
     X_train, X_test = X[i_train], X[i_test]
     y_train, y_test = y[i_train], y[i_test]
 
-    #model = tf.keras.models.load_model('./ressources/model_url.h5')
-
+    #load_options = tf.saved_model.SaveOptions(experimental_io_device='/job:localhost')
+    #model = tf.keras.models.load_model('./ressources/model_url.h5', options=load_options)
+    model = joblib.load('./ressources/model_url.pkl')
     phishing = np.where(y_test == 1)[0]
     X_test_phishing, y_test_phishing = X_test[phishing], y_test[phishing]
 
@@ -65,7 +127,7 @@ if __name__ == '__main__':
 
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
-    BATCH_SIZE = 1
+    BATCH_SIZE = 50
     eps = 0.2
     sampler = Sampler()
     distance = 'l2'
@@ -108,7 +170,7 @@ if __name__ == '__main__':
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
         for i in range(BATCH_SIZE):
-            hp = Hyperband(objective=url_evaluator, classifier=None, x=x_clean[i], y=y_clean[i], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=3, distance=distance)
+            hp = Hyperband(objective=url_evaluator, classifier=model, x=x_clean[i], y=y_clean[i], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=3, distance=distance)
             all_scrores, all_configs, all_candidates = hp.generate(mutables=None, features_min_max=(0,1))
 
             scores.append(all_scrores)
