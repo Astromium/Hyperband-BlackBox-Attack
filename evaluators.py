@@ -8,6 +8,7 @@ from constraints.constraints_executor import NumpyConstraintsExecutor
 from constraints.relation_constraint import AndConstraint
 from sklearn.preprocessing import MinMaxScaler
 import numpy as np
+import math
 
 @dataclass
 class Evaluator(ABC):
@@ -28,11 +29,12 @@ class TfEvaluator(Evaluator):
     
     def evaluate(self, classifier: Any, configuration: tuple, budget: int, x: NDArray, y: int, eps: float, distance: str, features_min_max: Union[tuple, None], generate_perturbation: Callable):
         score = 0.0
-        scores = np.array([])
+        best_score = math.inf
+        best_adversarial = None
         adv = np.array(x)
         for _ in range(budget):
-            #perturbation = generate_perturbation(shape=np.array(configuration).shape, eps=eps, distance=distance)
-            perturbation = np.random.randn(*np.array(configuration).shape)
+            perturbation = generate_perturbation(shape=np.array(configuration).shape, eps=eps, distance=distance)
+            #perturbation = np.random.randn(*np.array(configuration).shape)
             adv[list(configuration)] += perturbation
 
             # projecting into the Lp-ball
@@ -40,7 +42,6 @@ class TfEvaluator(Evaluator):
             dist = np.linalg.norm(adv - x, ord=norm)
             if dist > eps:
                 adv = x + (adv - x) * eps / dist
-                    
             # clipping into min-max values
             if features_min_max:
                 adv = np.clip(adv, features_min_max[0], features_min_max[1])
@@ -51,9 +52,13 @@ class TfEvaluator(Evaluator):
                 if self.scaler:
                     adv_rescaled = self.scaler.inverse_transform(np.array(adv)[np.newaxis, :])
                 violations = self.constraint_executor.execute(adv_rescaled)[0]
-            score += self.alpha * pred[0][y] + self.beta * violations 
+            score = self.alpha * pred[0][y] + self.beta * violations 
+            #score = self.alpha + self.beta * violations
+            if score < best_score:
+                best_score = score
+                best_adversarial = adv
 
-        return round(score / budget, 3), adv
+        return round(best_score, 3), best_adversarial
     
 class SickitEvaluator(Evaluator):
     def __init__(self):
