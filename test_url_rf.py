@@ -1,15 +1,11 @@
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-import tensorflow as tf
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
 from hyperband import Hyperband
-from evaluators import TfEvaluator
 from sampler import Sampler
-from utils.sr_calculators import TfCalculator
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
+from evaluators import SickitEvaluator
+from utils.sr_calculators import SickitCalculator
 from constraints.constraints_executor import NumpyConstraintsExecutor
 from constraints.url_constraints import get_url_relation_constraints
 from constraints.relation_constraint import AndConstraint
@@ -18,71 +14,10 @@ import timeit
 import joblib
 import pickle
 import warnings
-from keras.layers import Input, Dropout, Dense, Activation
-#from tensorflow.keras import Sequential
 #tf.compat.v1.disable_eager_execution()
 #tf.compat.v1.enable_v2_behavior()
 warnings.filterwarnings(action='ignore')
 
-scaler = preprocessing_pipeline = joblib.load('./ressources/baseline_scaler.joblib')
-
-'''
-def create_dnn(units, optimizer, loss):
-    model = Sequential()
-    model.add(Input(shape=(63)))
-    model.add(Dense(units=units[0], activation='relu'))
-    model.add(Dropout(0.1))
-    model.add(Dense(units=units[1], activation='relu'))
-    model.add(Dropout(0.1))
-    model.add(Dense(units=units[2], activation='relu'))
-    model.add(Dense(units=2))
-    model.add(Activation('softmax'))
-    
-    model.compile(optimizer=optimizer, loss=loss, metrics=[tf.keras.metrics.BinaryAccuracy()])
-    return model
-
-opt = tf.keras.optimizers.legacy.Adam()
-loss = tf.keras.losses.CategoricalCrossentropy()
-
-LAYERS = [256, 128, 64]
-model = create_dnn(units=LAYERS, optimizer=opt, loss=loss)
-print(model.summary())
-'''
-
-'''
-
-df = pd.read_csv('./ressources/url.csv')
-y = np.array(df['is_phishing'])
-X = np.array(df[df.columns.drop('is_phishing')])
-
-from sklearn.model_selection import train_test_split
-from tensorflow.keras.utils import to_categorical
-
-merged = np.arange(len(X))
-i_train, i_test = train_test_split(
-        merged,
-        random_state=100,
-        shuffle=True,
-        stratify=y[merged],
-        test_size=0.2,
-)
-i_train, i_val = train_test_split(
-        i_train,
-        random_state=200,
-        shuffle=True,
-        stratify=y[i_train],
-        test_size=0.2,
-)
-
-X = scaler.fit_transform(X)
-X_train, X_test, X_val = X[i_train], X[i_test], X[i_val]
-y_train, y_test, y_val = y[i_train], y[i_test], y[i_val]
-y_train_cat, y_val_cat = to_categorical(y_train), to_categorical(y_val)
-y_test_cat = to_categorical(y_test)
-'''
-
-#history = model.fit(X_train, y_train_cat, epochs=30, validation_data=(X_val, y_val_cat))
-#joblib.dump(model, './ressources/model_url.pkl')
 
 if __name__ == '__main__':
     print(f'Hello {os.getpid()} from test_url')
@@ -100,23 +35,22 @@ if __name__ == '__main__':
     )
 
     #scaler = MinMaxScaler()
-    
+    scaler = preprocessing_pipeline = joblib.load('./ressources/baseline_scaler.joblib')
     X = scaler.transform(X)
     X_train, X_test = X[i_train], X[i_test]
     y_train, y_test = y[i_train], y[i_test]
 
-    load_options = tf.saved_model.SaveOptions(experimental_io_device='/job:localhost')
-    model = tf.keras.models.load_model('./ressources/model_url2.h5', options=load_options)
-    #model = joblib.load('./ressources/model_url.pkl')
+    #model = tf.keras.models.load_model('./ressources/model_url.h5')
+
     phishing = np.where(y_test == 1)[0]
     X_test_phishing, y_test_phishing = X_test[phishing], y_test[phishing]
 
     x_clean = np.load('./ressources/baseline_X_test_candidates.npy')
     y_clean = np.load('./ressources/baseline_y_test_candidates.npy')
-    x_clean = scaler.transform(x_clean)
+    #x_clean = scaler.transform(x_clean)
 
     rf = joblib.load('./ressources/baseline_rf.model')
-    #model_pipeline = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', rf)])
+    model_pipeline = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', rf)])
     metadata = pd.read_csv('./ressources/url_metadata.csv')
     min_constraints = metadata['min'].to_list()[:63]
     max_constraints = metadata['max'].to_list()[:63]
@@ -127,10 +61,10 @@ if __name__ == '__main__':
 
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
-    BATCH_SIZE = 50
+    BATCH_SIZE = 100
     eps = 0.2
     sampler = Sampler()
-    distance = 'l2'
+    distance = 'inf'
     success_rates_l2 = []
     exec_times_l2 = []
 
@@ -166,24 +100,23 @@ if __name__ == '__main__':
     '''
         
     for R in R_values:
-        url_evaluator = TfEvaluator(constraints=constraints, scaler=scaler, alpha=0.5, beta=0.5)
+        url_evaluator = SickitEvaluator(constraints=constraints, scaler=scaler, alpha=0.5, beta=0.5)
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
         for i in range(BATCH_SIZE):
-            hp = Hyperband(objective=url_evaluator, classifier=model, x=x_clean[i], y=y_clean[i], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=3, distance=distance)
+            hp = Hyperband(objective=url_evaluator, classifier=model_pipeline, x=x_clean[i], y=y_clean[i], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=3, distance=distance)
             all_scrores, all_configs, all_candidates = hp.generate(mutables=None, features_min_max=(0,1))
 
             scores.append(all_scrores)
             configs.append(all_configs)
             candidates.append(all_candidates)
-            print(f'all_scores length {all_scrores}')
 
         end = timeit.default_timer()
         print(f'Exec time {round((end - start) / 60, 3)}')
-        success_rate_calculator = TfCalculator(classifier=model, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates)
+        success_rate_calculator = SickitCalculator(classifier=model_pipeline, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates)
         success_rate, best_candidates, adversarials = success_rate_calculator.evaluate()
         print(f'success rate {success_rate}, len best_candidates {len(best_candidates)}, len adversarials {len(adversarials)}')
-        adversarials, best_candidates = scaler.inverse_transform(np.array(adversarials)), scaler.inverse_transform(np.array(best_candidates))
+        #adversarials, best_candidates = scaler.inverse_transform(np.array(adversarials)), scaler.inverse_transform(np.array(best_candidates))
         #print(f'\n Execution Time {round((end - start) / 60, 3)}\n')
         #print(f'Success rate over {BATCH_SIZE} examples (M) : {success_rate * 100}')
         #print(f'len adversarials {len(adversarials)}')

@@ -4,15 +4,14 @@ from dataclasses import dataclass
 from evaluators import Evaluator
 from numpy.typing import NDArray
 from sampler import Sampler
-from tqdm import tqdm
 from worker import Worker
-from multiprocessing import Lock
-from multiprocessing import Pool
 from joblib import Parallel, delayed
 import os
 import math
 
-lock = Lock()
+
+
+print(f'Hello {os.getpid()} from Hyperband')
 
 def run_worker(args):
     sh = SuccessiveHalving(**args)
@@ -69,7 +68,9 @@ class Hyperband():
         p.close()
         p.join()
         '''
+        
         results = Parallel(n_jobs=-1)(delayed(run_worker)(params[i]) for i in range(len(params)))
+        
 
         for (scores, configurations, candidates) in results:
             all_scores.extend(scores)
@@ -77,9 +78,6 @@ class Hyperband():
             all_candidates.extend(candidates)
         
         
-
-        
-        processes = [Worker(kwargs=params[i]) for i in reversed(range(s_max + 1))]
         #res = processes[0].run()
         #res1 = processes[1].run()
         
