@@ -1,5 +1,5 @@
-#import os
-#os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
 import numpy as np
 import pandas as pd
@@ -23,7 +23,7 @@ scaler = preprocessing_pipeline = joblib.load('./ressources/baseline_scaler.jobl
 
 
 if __name__ == '__main__':
-    #print(f'Hello {os.getpid()} from test_url')
+    print(f'Hello {os.getpid()} from test_url')
     df = pd.read_csv('./ressources/url.csv')
     X = np.array(df[df.columns.drop('is_phishing')])
     y = np.array(df['is_phishing'])
