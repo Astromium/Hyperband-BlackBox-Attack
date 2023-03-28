@@ -61,12 +61,13 @@ executor = NumpyConstraintsExecutor(AndConstraint(constraints))
 dimensions = X_test.shape[1]
 BATCH_SIZE = 1
 eps = 0.2
+downsample=2
 sampler = Sampler()
 distance = 'l2'
 success_rates_l2 = []
 exec_times_l2 = []
 
-R_values = [81]
+R_values = [512]
 history_dict = dict()
 
 
@@ -106,7 +107,7 @@ if __name__ == '__main__':
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
         for i in range(BATCH_SIZE):
-            hp = Hyperband(objective=url_evaluator, classifier=model, x=x_clean[i], y=y_clean[i], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=2, distance=distance)
+            hp = Hyperband(objective=url_evaluator, classifier=model, x=x_clean[i], y=y_clean[i], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=downsample, distance=distance)
             all_scrores, all_configs, all_candidates = hp.generate(mutables=None, features_min_max=(0,1))
 
             scores.append(all_scrores)
@@ -114,6 +115,7 @@ if __name__ == '__main__':
             candidates.append(all_candidates)
 
         end = timeit.default_timer()
+        print(f'Execution time {round((end - start) / 60, 3)}')
         success_rate_calculator = TfCalculator(classifier=model, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates)
         success_rate, best_candidates, adversarials = success_rate_calculator.evaluate()
         adversarials, best_candidates = scaler.inverse_transform(np.array(adversarials)), scaler.inverse_transform(np.array(best_candidates))
