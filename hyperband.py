@@ -21,7 +21,7 @@ def run_worker(args):
 @dataclass
 class Hyperband():
     objective: Evaluator
-    classifier_path: str
+    classifier: Any
     x: NDArray
     y: int
     sampler: Sampler
@@ -44,7 +44,7 @@ class Hyperband():
         print(f'Hyperband brackets {s_max + 1}')
         params = [ 
             {'objective': self.objective, 
-             'classifier_path': self.classifier_path, 
+             'classifier': self.classifier, 
              'sampler': self.sampler, 
              'x': self.x, 'y': self.y, 
              'eps': self.eps, 
