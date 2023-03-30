@@ -65,8 +65,8 @@ if __name__ == '__main__':
 
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
-    BATCH_SIZE = 1
-    eps = 0.2
+    BATCH_SIZE = 100
+    eps = 0.05
     downsample = 2
     sampler = Sampler()
     distance = 'l2'
@@ -74,7 +74,7 @@ if __name__ == '__main__':
     success_rates_l2 = []
     exec_times_l2 = []
 
-    R_values = [1024]
+    R_values = [256]
     history_dict = dict()
     '''
     for eps in perturbations:
@@ -109,13 +109,9 @@ if __name__ == '__main__':
         url_evaluator = TorchEvaluator(constraints=constraints, scaler=scaler, alpha=0.5, beta=0.5)
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
-        for i in range(BATCH_SIZE):
-            hp = Hyperband(objective=url_evaluator, classifier=model, x=x_clean[i], y=y_clean[i], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=downsample, distance=distance)
-            all_scrores, all_configs, all_candidates = hp.generate(mutables=None, features_min_max=(0,1))
-
-            scores.append(all_scrores)
-            configs.append(all_configs)
-            candidates.append(all_candidates)
+        
+        hp = Hyperband(objective=url_evaluator, classifier=model, x=x_clean[:BATCH_SIZE], y=y_clean[:BATCH_SIZE], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=downsample, distance=distance)
+        scores, configs, candidates = hp.generate(mutables=None, features_min_max=(0,1))
 
         end = timeit.default_timer()
         print(f'Exec time {round((end - start) / 60, 3)}')
