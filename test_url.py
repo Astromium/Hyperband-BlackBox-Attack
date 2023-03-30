@@ -74,7 +74,7 @@ if __name__ == '__main__':
     success_rates_l2 = []
     exec_times_l2 = []
 
-    R_values = [81]
+    R_values = [1024]
     history_dict = dict()
     '''
     for eps in perturbations:
