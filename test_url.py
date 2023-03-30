@@ -67,7 +67,7 @@ if __name__ == '__main__':
     dimensions = X_test.shape[1]
     BATCH_SIZE = 1
     eps = 0.2
-    downsample = 3
+    downsample = 2
     sampler = Sampler()
     distance = 'l2'
     classifier_path = './ressources/model_url.h5'
