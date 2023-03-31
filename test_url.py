@@ -1,22 +1,22 @@
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-import tensorflow as tf
+import torch
 import numpy as np
 import pandas as pd
 from hyperband import Hyperband
-from evaluators import TfEvaluator
+from evaluators import TorchEvaluator
 from sampler import Sampler
-from utils.sr_calculators import TfCalculator
+from utils.sr_calculators import TorchCalculator
 from sklearn.model_selection import train_test_split
 from constraints.constraints_executor import NumpyConstraintsExecutor
 from constraints.url_constraints import get_url_relation_constraints
 from constraints.relation_constraint import AndConstraint
+from ml_wrappers import wrap_model
+from utils.model import Net
 import timeit
 import joblib
 import pickle
 import warnings
-tf.compat.v1.disable_eager_execution()
-#tf.compat.v1.enable_v2_behavior()
 warnings.filterwarnings(action='ignore')
 
 scaler = preprocessing_pipeline = joblib.load('./ressources/baseline_scaler.joblib')
@@ -59,10 +59,15 @@ if __name__ == '__main__':
     constraints = get_url_relation_constraints()
     executor = NumpyConstraintsExecutor(AndConstraint(constraints))
 
+    model = Net()
+    model = torch.load('./ressources/model_url.pth')
+    model = wrap_model(model, x_clean, model_task='classification')
+
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
-    BATCH_SIZE = 100
+    BATCH_SIZE = 1
     eps = 0.2
+    downsample = 3
     sampler = Sampler()
     distance = 'l2'
     classifier_path = './ressources/model_url.h5'
@@ -101,11 +106,11 @@ if __name__ == '__main__':
     '''
         
     for R in R_values:
-        url_evaluator = TfEvaluator(constraints=constraints, scaler=scaler, alpha=0.5, beta=0.5)
+        url_evaluator = TorchEvaluator(constraints=constraints, scaler=scaler, alpha=0.5, beta=0.5)
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
         for i in range(BATCH_SIZE):
-            hp = Hyperband(objective=url_evaluator, classifier_path=classifier_path, x=x_clean[i], y=y_clean[i], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=3, distance=distance)
+            hp = Hyperband(objective=url_evaluator, classifier=model, x=x_clean[i], y=y_clean[i], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=downsample, distance=distance)
             all_scrores, all_configs, all_candidates = hp.generate(mutables=None, features_min_max=(0,1))
 
             scores.append(all_scrores)
@@ -114,8 +119,7 @@ if __name__ == '__main__':
 
         end = timeit.default_timer()
         print(f'Exec time {round((end - start) / 60, 3)}')
-        model = tf.keras.models.load_model(classifier_path)
-        success_rate_calculator = TfCalculator(classifier=model, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates)
+        success_rate_calculator = TorchCalculator(classifier=model, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates)
         success_rate, best_candidates, adversarials = success_rate_calculator.evaluate()
         print(f'success rate {success_rate}, len best_candidates {len(best_candidates)}, len adversarials {len(adversarials)}')
         adversarials, best_candidates = scaler.inverse_transform(np.array(adversarials)), scaler.inverse_transform(np.array(best_candidates))

@@ -21,7 +21,7 @@ def run_worker(args):
 @dataclass
 class Hyperband():
     objective: Evaluator
-    classifier_path: str
+    classifier: Any
     x: NDArray
     y: int
     sampler: Sampler
@@ -41,10 +41,10 @@ class Hyperband():
         # Number of Hyperband rounds
         s_max = math.floor(math.log(self.R, self.downsample))
         B = self.R * (s_max + 1)
-
+        print(f'Hyperband brackets {s_max + 1}')
         params = [ 
             {'objective': self.objective, 
-             'classifier_path': self.classifier_path, 
+             'classifier': self.classifier, 
              'sampler': self.sampler, 
              'x': self.x, 'y': self.y, 
              'eps': self.eps, 
@@ -69,7 +69,7 @@ class Hyperband():
         p.join()
         '''
         
-        results = Parallel(n_jobs=-1, verbose=0, backend='multiprocessing', prefer='processes')(delayed(run_worker)(params[i]) for i in range(len(params)))
+        results = Parallel(n_jobs=s_max+1, verbose=0, backend='multiprocessing', prefer='processes')(delayed(run_worker)(params[i]) for i in range(s_max + 1))
         
 
         for (scores, configurations, candidates) in results:

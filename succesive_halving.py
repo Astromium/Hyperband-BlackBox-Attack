@@ -11,7 +11,7 @@ from utils.perturbation_generator import generate_perturbation
 @dataclass
 class SuccessiveHalving():
     objective: Evaluator
-    classifier_path: str
+    classifier: Any
     sampler: Sampler 
     x: NDArray
     y: int 
@@ -31,7 +31,7 @@ class SuccessiveHalving():
         if(self.downsample <= 1):
             raise(ValueError('Downsample must be > 1'))
         
-        classifier = load_model(self.classifier_path)
+        
         round_n = lambda n : max(round(n), 1)
         
         configurations = self.sampler.sample(
@@ -49,7 +49,7 @@ class SuccessiveHalving():
             budget = self.bracket_budget * pow(self.downsample, i)
             for score, candidate, configuration in tqdm(zip(scores, candidates, configurations), total=len(configurations), desc=f'Running Round {i} of SH. Evaluating {len(configurations)} configurations with budget of {budget}'):
                 new_score, new_candidate = self.objective.evaluate(
-                    classifier=classifier,
+                    classifier=self.classifier,
                     configuration=configuration,
                     budget=budget,
                     x=self.x,
