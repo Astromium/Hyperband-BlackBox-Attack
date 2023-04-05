@@ -66,15 +66,15 @@ if __name__ == '__main__':
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
     BATCH_SIZE = 100
-    eps = 0.05
-    downsample = 2
+    eps = 0.2
+    downsample = 3
     sampler = Sampler()
     distance = 'l2'
     classifier_path = './ressources/model_url.h5'
     success_rates_l2 = []
     exec_times_l2 = []
 
-    R_values = [256]
+    R_values = [81]
     history_dict = dict()
     '''
     for eps in perturbations:
