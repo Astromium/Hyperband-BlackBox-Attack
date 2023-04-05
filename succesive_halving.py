@@ -32,11 +32,9 @@ class SuccessiveHalving():
             raise(ValueError('Downsample must be > 1'))
         
         
-        round_n = lambda n : max(round(n), 1)
+        round_n = lambda n : max(int(n), 1)
 
         all_results = [] 
-
-        print(f'X shape is {self.x.shape[0]}')
 
         for idx in range(self.x.shape[0]):
         

@@ -55,8 +55,8 @@ class Hyperband():
              'downsample': self.downsample,
              'mutables': mutables,
              'features_min_max': features_min_max,
-             'n_configurations': max(round((B * (self.downsample ** i)) / (self.R * (i + 1))), 1),
-             'bracket_budget': max(round(self.R / (self.downsample ** i)), 1),
+             'n_configurations': max(int((B * (self.downsample ** i)) / (self.R * (i + 1))), 1),
+             'bracket_budget': max(int(self.R / (self.downsample ** i)), 1),
              'hyperband_bracket': i
             } 
             for i in reversed(range(s_max + 1)) 
@@ -73,14 +73,12 @@ class Hyperband():
         global_scores = []
         global_configs = []
         global_candidates = []
-        print(f'len results {len(results)}, len results[0] {len(results[0])}')
         for i in range(self.x.shape[0]):
             scores, configs, candidates = [], [], []
             for th in results:
-                for (sc, c, ca) in th:
-                    scores.extend(sc)
-                    configs.extend(c)
-                    candidates.extend(ca)
+                scores.extend(th[i][0])
+                configs.extend(th[i][1])
+                candidates.extend(th[i][2])
             global_scores.append(scores)
             global_configs.append(configs)
             global_candidates.append(candidates)
