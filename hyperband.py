@@ -15,15 +15,15 @@ print(f'Hello {os.getpid()} from Hyperband')
 
 def run_worker(args):
     sh = SuccessiveHalving(**args)
-    scores, configurations, candidates = sh.run()
-    return scores, configurations, candidates
+    all_results = sh.run()
+    return all_results
 
 @dataclass
 class Hyperband():
     objective: Evaluator
     classifier: Any
     x: NDArray
-    y: int
+    y: NDArray
     sampler: Sampler
     eps: float
     dimensions: int
@@ -55,8 +55,8 @@ class Hyperband():
              'downsample': self.downsample,
              'mutables': mutables,
              'features_min_max': features_min_max,
-             'n_configurations': max(round((B * (self.downsample ** i)) / (self.R * (i + 1))), 1),
-             'bracket_budget': max(round(self.R / (self.downsample ** i)), 1),
+             'n_configurations': max(int((B * (self.downsample ** i)) / (self.R * (i + 1))), 1),
+             'bracket_budget': max(int(self.R / (self.downsample ** i)), 1),
              'hyperband_bracket': i
             } 
             for i in reversed(range(s_max + 1)) 
@@ -70,12 +70,40 @@ class Hyperband():
         '''
         
         results = Parallel(n_jobs=s_max+1, verbose=0, backend='multiprocessing', prefer='processes')(delayed(run_worker)(params[i]) for i in range(s_max + 1))
+        global_scores = []
+        global_configs = []
+        global_candidates = []
+        for i in range(self.x.shape[0]):
+            scores, configs, candidates = [], [], []
+            for th in results:
+                scores.extend(th[i][0])
+                configs.extend(th[i][1])
+                candidates.extend(th[i][2])
+            global_scores.append(scores)
+            global_configs.append(configs)
+            global_candidates.append(candidates)
+
+        # for b in zip(*results):
+        #     scores, configs, candidates = [], [], []
+        #     for (s, c, ca) in b:
+        #         scores.extend(s)
+        #         configs.extend(c)
+        #         candidates.extend(ca)
+        #     global_scores.append(scores)
+        #     global_configs.append(configs)
+        #     global_candidates.append(candidates)
+        
+        print(f'len global_scores[0] {len(global_scores[0])}')
+
+
+        #for thread in zip(*results):
+
         
 
-        for (scores, configurations, candidates) in results:
-            all_scores.extend(scores)
-            all_configurations.extend(configurations)
-            all_candidates.extend(candidates)
+        # for (scores, configurations, candidates) in results:
+        #     all_scores.extend(scores)
+        #     all_configurations.extend(configurations)
+        #     all_candidates.extend(candidates)
         
         
         #res = processes[0].run()
@@ -123,6 +151,6 @@ class Hyperband():
             all_candidates.extend(candidates)
             '''
         
-        return all_scores, all_configurations, all_candidates
+        return global_scores, global_configs, global_candidates
 
 
