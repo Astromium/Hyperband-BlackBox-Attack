@@ -53,12 +53,12 @@ def get_url_relation_constraints() -> List[BaseRelationConstraint]:
     # x[:,38] <= x[:,37]
     g12 = Feature(38) <= Feature(37)
 
-    g13 = (Constant(3) * Feature(20)) <= (Feature(0) + Constant(1))
+    g13 = (Constant(3) * Feature(20)) <= (Feature(0) - Constant(1))
 
-    g14 = (Constant(4) * Feature(21)) <= (Feature(0) + Constant(1))
+    g14 = (Constant(4) * Feature(21)) <= (Feature(0) - Constant(1))
 
-    g15 = (Constant(4) * Feature(2)) <= (Feature(0) + Constant(1))
-    g16 = (Constant(2) * Feature(23)) <= (Feature(0) + Constant(1))
+    g15 = (Constant(4) * Feature(22)) <= (Feature(0) - Constant(1))
+    g16 = (Constant(2) * Feature(23)) <= (Feature(0) - Constant(1))
 
     return [
         g1,
