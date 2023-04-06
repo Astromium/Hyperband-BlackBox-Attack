@@ -25,6 +25,7 @@ class SuccessiveHalving():
     n_configurations: int
     mutables: Union[List, None]
     features_min_max: Union[List, None]
+    seed: int
     hyperband_bracket: int
     
     def run(self):
@@ -42,7 +43,8 @@ class SuccessiveHalving():
                 dimensions=self.dimensions,
                 num_configs=self.n_configurations,
                 max_configuration_size=self.max_configuration_size,
-                mutables_mask=self.mutables
+                mutables_mask=self.mutables,
+                seed=self.seed
             )
 
             scores = [math.inf for s in range(len(configurations))]

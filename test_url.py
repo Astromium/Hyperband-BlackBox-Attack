@@ -65,16 +65,17 @@ if __name__ == '__main__':
 
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
-    BATCH_SIZE = 100
+    BATCH_SIZE = 100#x_clean.shape[0]
     eps = 0.2
-    downsample = 4
+    downsample = 2
     sampler = Sampler()
     distance = 'l2'
     classifier_path = './ressources/model_url.h5'
+    seed = 1000
     success_rates_l2 = []
     exec_times_l2 = []
 
-    R_values = [1024]
+    R_values = [128]
     history_dict = dict()
     '''
     for eps in perturbations:
@@ -110,7 +111,7 @@ if __name__ == '__main__':
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
         
-        hp = Hyperband(objective=url_evaluator, classifier=model, x=x_clean[:BATCH_SIZE], y=y_clean[:BATCH_SIZE], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=downsample, distance=distance)
+        hp = Hyperband(objective=url_evaluator, classifier=model, x=x_clean[:BATCH_SIZE], y=y_clean[:BATCH_SIZE], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=downsample, distance=distance, seed=seed)
         scores, configs, candidates = hp.generate(mutables=None, features_min_max=(0,1))
 
         end = timeit.default_timer()

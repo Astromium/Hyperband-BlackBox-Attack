@@ -31,6 +31,7 @@ class Hyperband():
     R: int
     downsample: int
     distance: str
+    seed: int
 
 
     def generate(self, mutables=None, features_min_max=None):
@@ -57,6 +58,7 @@ class Hyperband():
              'features_min_max': features_min_max,
              'n_configurations': max(int((B * (self.downsample ** i)) / (self.R * (i + 1))), 1),
              'bracket_budget': max(int(self.R / (self.downsample ** i)), 1),
+             'seed': self.seed,
              'hyperband_bracket': i
             } 
             for i in reversed(range(s_max + 1)) 
