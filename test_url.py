@@ -71,11 +71,11 @@ if __name__ == '__main__':
     sampler = Sampler()
     distance = 'l2'
     classifier_path = './ressources/model_url.h5'
-    seed = 1000
+    seed = 202374
     success_rates_l2 = []
     exec_times_l2 = []
 
-    R_values = [128]
+    R_values = [390]
     history_dict = dict()
     '''
     for eps in perturbations:
