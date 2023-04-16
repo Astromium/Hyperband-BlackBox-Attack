@@ -59,7 +59,7 @@ class Hyperband():
              'n_configurations': max(int((B * (self.downsample ** i)) / (self.R * (i + 1))), 1),
              'bracket_budget': max(int(self.R / (self.downsample ** i)), 1),
              'seed': self.seed,
-             'hyperband_bracket': i
+             'hyperband_bracket': i,
             } 
             for i in reversed(range(s_max + 1)) 
         ]
@@ -75,15 +75,18 @@ class Hyperband():
         global_scores = []
         global_configs = []
         global_candidates = []
+        global_history = []
         for i in range(self.x.shape[0]):
-            scores, configs, candidates = [], [], []
+            scores, configs, candidates, history = [], [], [], []
             for th in results:
                 scores.extend(th[i][0])
                 configs.extend(th[i][1])
                 candidates.extend(th[i][2])
+                history.append(th[i][3])
             global_scores.append(scores)
             global_configs.append(configs)
             global_candidates.append(candidates)
+            global_history.extend(history)
 
         # for b in zip(*results):
         #     scores, configs, candidates = [], [], []
@@ -95,7 +98,7 @@ class Hyperband():
         #     global_configs.append(configs)
         #     global_candidates.append(candidates)
         
-        print(f'len global_scores[0] {len(global_scores[0])}')
+        #print(f'len global_scores[0] {len(global_scores[0])}')
 
 
         #for thread in zip(*results):
@@ -152,7 +155,7 @@ class Hyperband():
             all_configurations.extend(configurations)
             all_candidates.extend(candidates)
             '''
-        
-        return global_scores, global_configs, global_candidates
+        #print(f'global history {global_history}')
+        return global_scores, global_configs, global_candidates, global_history
 
 

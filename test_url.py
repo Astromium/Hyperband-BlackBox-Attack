@@ -17,6 +17,7 @@ import timeit
 import joblib
 import pickle
 import warnings
+import cProfile, pstats
 warnings.filterwarnings(action='ignore')
 
 scaler = preprocessing_pipeline = joblib.load('./ressources/baseline_scaler.joblib')
@@ -69,13 +70,14 @@ if __name__ == '__main__':
     eps = 0.2
     downsample = 2
     sampler = Sampler()
-    distance = 'l2'
+    distance = 2
     classifier_path = './ressources/model_url.h5'
-    seed = 1000
+    seed = 202374
+    #np.random.seed(seed)
     success_rates_l2 = []
     exec_times_l2 = []
 
-    R_values = [128]
+    R_values = [390]
     history_dict = dict()
     '''
     for eps in perturbations:
@@ -112,7 +114,13 @@ if __name__ == '__main__':
         start = timeit.default_timer()
         
         hp = Hyperband(objective=url_evaluator, classifier=model, x=x_clean[:BATCH_SIZE], y=y_clean[:BATCH_SIZE], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=downsample, distance=distance, seed=seed)
-        scores, configs, candidates = hp.generate(mutables=None, features_min_max=(0,1))
+        profiler = cProfile.Profile()
+        profiler.enable()
+        scores, configs, candidates, _ = hp.generate(mutables=None, features_min_max=(0,1))
+        profiler.disable()
+        stats = pstats.Stats(profiler).sort_stats(pstats.SortKey.TIME)
+        stats.print_stats()
+        stats.dump_stats('results.prof')
 
         end = timeit.default_timer()
         print(f'Exec time {round((end - start) / 60, 3)}')

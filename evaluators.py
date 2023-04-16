@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Union, Callable, List
+from typing import Any, Union, Callable, List, Dict
 from numpy.typing import NDArray
 from scipy.special import softmax
 from constraints.relation_constraint import BaseRelationConstraint
@@ -69,36 +69,45 @@ class TorchEvaluator(Evaluator):
         self.alpha = alpha
         self.beta = beta
     
-    def evaluate(self, classifier: Any, configuration: tuple, budget: int, x: NDArray, y: int, eps: float, distance: str, features_min_max: Union[tuple, None], generate_perturbation: Callable):
+    
+    def evaluate(self, classifier: Any, configuration: tuple, budget: int, x: NDArray, y: int, eps: float, distance: str, features_min_max: Union[tuple, None], generate_perturbation: Callable, history: Dict, candidate: NDArray):
         score = 0.0
         best_score = math.inf
         best_adversarial = None
-        adv = np.array(x)
+        if candidate is None:
+            adv = np.copy(x)
+        else:
+            adv = np.copy(candidate)
         for _ in range(budget):
             perturbation = generate_perturbation(shape=np.array(configuration).shape, eps=eps, distance=distance)
             #perturbation = np.random.randn(*np.array(configuration).shape)
             adv[list(configuration)] += perturbation
-
+            # clipping into min-max values
+            #if features_min_max:
+            adv = np.clip(adv, features_min_max[0], features_min_max[1])
             # projecting into the Lp-ball
-            norm = 2 if distance == 'l2' else np.inf
-            dist = np.linalg.norm(adv - x, ord=norm)
+            #norm = 2 if distance == 'l2' else np.inf
+            dist = np.linalg.norm(adv - x, ord=distance)
             if dist > eps:
                 adv = x + (adv - x) * eps / dist
-            # clipping into min-max values
-            if features_min_max:
-                adv = np.clip(adv, features_min_max[0], features_min_max[1])
+            
 
             pred = classifier.predict_proba(adv[np.newaxis, :])[0]
             violations = 0.0
-            if self.constraints:
-                if self.scaler:
-                    adv_rescaled = self.scaler.inverse_transform(np.array(adv)[np.newaxis, :])
-                violations = self.constraint_executor.execute(adv_rescaled)[0]
+            #if self.constraints:
+                #if self.scaler:
+            adv_rescaled = self.scaler.inverse_transform(adv[np.newaxis, :])
+            violations = self.constraint_executor.execute(adv_rescaled)[0]
             score = self.alpha * pred[y] + self.beta * violations 
+            #history[tuple(configuration)].append(score)
             #score = self.alpha + self.beta * violations
             if score < best_score:
                 best_score = score
                 best_adversarial = adv
+            
+        dist = np.linalg.norm(best_adversarial - x, ord=distance)
+        if dist > eps:
+            best_adversarial = x + (best_adversarial - x) * eps / dist
 
         return round(best_score, 3), best_adversarial
     
