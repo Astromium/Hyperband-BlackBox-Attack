@@ -74,11 +74,12 @@ class TorchEvaluator(Evaluator):
         score = 0.0
         best_score = math.inf
         best_adversarial = None
+        scores = [0] * budget
         if candidate is None:
             adv = np.copy(x)
         else:
             adv = np.copy(candidate)
-        for _ in range(budget):
+        for i in range(budget):
             perturbation = generate_perturbation(shape=np.array(configuration).shape, eps=eps, distance=distance)
             #perturbation = np.random.randn(*np.array(configuration).shape)
             adv[list(configuration)] += perturbation
@@ -89,6 +90,7 @@ class TorchEvaluator(Evaluator):
             #norm = 2 if distance == 'l2' else np.inf
             dist = np.linalg.norm(adv - x, ord=distance)
             if dist > eps:
+                #print('Projecting')
                 adv = x + (adv - x) * eps / dist
             
 
@@ -98,18 +100,28 @@ class TorchEvaluator(Evaluator):
                 #if self.scaler:
             adv_rescaled = self.scaler.inverse_transform(adv[np.newaxis, :])
             violations = self.constraint_executor.execute(adv_rescaled)[0]
-            score = self.alpha * pred[y] + self.beta * violations 
+            scores[i] = (self.alpha * pred[y] + self.beta * violations, np.copy(adv)) 
             #history[tuple(configuration)].append(score)
             #score = self.alpha + self.beta * violations
+            '''
             if score < best_score:
+                print('New score')
+                dist1 = np.linalg.norm(x - adv)
+                print(f'dist of adv {dist1}')
                 best_score = score
-                best_adversarial = adv
+                best_adversarial = np.copy(adv)
+                dist1 = np.linalg.norm(x - best_adversarial)
+                print(f'dist after assignement {dist1}')
+            '''
             
-        dist = np.linalg.norm(best_adversarial - x, ord=distance)
-        if dist > eps:
-            best_adversarial = x + (best_adversarial - x) * eps / dist
-
-        return round(best_score, 3), best_adversarial
+            #dist = np.linalg.norm(best_adversarial - x, ord=distance)
+            #print(f'dist of best {dist}')
+            #if dist > eps:
+                #best_adversarial = x + (best_adversarial - x) * eps / dist
+        scores = sorted(scores, key=lambda k: k[0])
+        #dist = np.linalg.norm(x - best_adversarial, ord=distance)
+        #print(f'dist before returning {dist}')
+        return round(scores[0][0], 3), scores[0][1]
     
 class SickitEvaluator(Evaluator):
     def __init__(self, constraints: Union[List[BaseRelationConstraint], None], scaler: Union[MinMaxScaler, None], alpha: float, beta: float):
@@ -131,7 +143,7 @@ class SickitEvaluator(Evaluator):
 
             # projecting into the Lp-ball
             norm = 2 if distance == 'l2' else np.inf
-            dist = np.linalg.norm(adv - x, ord=norm)
+            dist = np.linalg.norm(self.scaler.transform(adv[np.newaxis, :])[0] - self.scaler.transform(x[np.newaxis, :]), ord=norm)
             if dist > eps:
                 adv = x + (adv - x) * eps / dist
             
