@@ -6,6 +6,8 @@ from numpy.typing import NDArray
 from sampler import Sampler
 from evaluators import Evaluator
 from utils.perturbation_generator import generate_perturbation
+from bayes_opt import BayesianOptimizer
+from utils.config_generator2 import ConfigGenerator
 
 @dataclass
 class SuccessiveHalving():
@@ -25,22 +27,24 @@ class SuccessiveHalving():
     mutables: Union[List, None]
     features_min_max: Union[List, None]
     hyperband_bracket: int
+    optimizer: BayesianOptimizer
+    config_generator: ConfigGenerator
+    is_first: bool
     
     def run(self):
         if(self.downsample <= 1):
             raise(ValueError('Downsample must be > 1'))
         
         round_n = lambda n : max(round(n), 1)
-        
-        configurations = self.sampler.sample(
-            dimensions=self.dimensions,
-            num_configs=self.n_configurations,
-            max_configuration_size=self.max_configuration_size,
-            mutables_mask=self.mutables
-        )
 
-        scores = [math.inf for i in range(len(configurations))]
-        candidates = [None for i in range(len(configurations))]
+        # Sample without prior if first bracket
+        if self.is_first:
+            configurations = self.config_generator.get_configurations(n_sample=self.n_configurations, logits=None)
+        else:
+            configuration = self.optimizer.get_next(n_samples=self.n_configurations)
+
+        scores = [math.inf for _ in range(len(configurations))]
+        candidates = [None for _ in range(len(configurations))]
 
         results = []
         for i in range(self.hyperband_bracket + 1):

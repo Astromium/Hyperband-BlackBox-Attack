@@ -5,6 +5,8 @@ from evaluators import Evaluator
 from numpy.typing import NDArray
 from sampler import Sampler
 from tqdm import tqdm
+from bayes_opt import BayesianOptimizer
+from utils.config_generator2 import ConfigGenerator
 import math
 
 @dataclass
@@ -20,6 +22,8 @@ class Hyperband():
     R: int
     downsample: int
     distance: str
+    optimizer: BayesianOptimizer
+    config_generator: ConfigGenerator
 
     def generate(self, mutables=None, features_min_max=None):
         if self.downsample <= 1:
@@ -51,7 +55,10 @@ class Hyperband():
                 n_configurations=n,
                 mutables=mutables,
                 features_min_max=features_min_max,
-                hyperband_bracket=i
+                hyperband_bracket=i,
+                optimizer= self.optimizer,
+                config_generator=self.config_generator,
+                is_first=(i == s_max + 1)
             )
 
             scores, configurations, candidates = sh.run()
