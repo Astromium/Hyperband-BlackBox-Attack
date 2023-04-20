@@ -23,7 +23,4 @@ class ConfigGenerator():
         out = list(zip([choice(self.mutable_features, int(sample[-1]), False, softmax(sample[:-1])) for sample in samples], samples))
         return out
         
-#cg = ConfigGenerator(mutable_features=list(range(4)))
-#samples = cg.get_configurations(n_sample=10, logits=None)
-#print(samples)
     

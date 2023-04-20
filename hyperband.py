@@ -22,6 +22,7 @@ class Hyperband():
     R: int
     downsample: int
     distance: str
+    seed: int
     optimizer: BayesianOptimizer
     config_generator: ConfigGenerator
 
@@ -58,7 +59,7 @@ class Hyperband():
                 hyperband_bracket=i,
                 optimizer= self.optimizer,
                 config_generator=self.config_generator,
-                is_first=(i == s_max + 1)
+                is_first=(i == s_max)
             )
 
             scores, configurations, candidates = sh.run()

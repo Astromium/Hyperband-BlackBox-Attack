@@ -41,10 +41,14 @@ class SuccessiveHalving():
         if self.is_first:
             configurations = self.config_generator.get_configurations(n_sample=self.n_configurations, logits=None)
         else:
-            configuration = self.optimizer.get_next(n_samples=self.n_configurations)
+            logits = self.optimizer.get_next(n_samples=self.n_configurations)
+            configurations = self.config_generator.get_configurations(n_sample=self.n_configurations, logits=logits)
+        #print(f'Configurations {configurations}')
 
-        scores = [math.inf for _ in range(len(configurations))]
-        candidates = [None for _ in range(len(configurations))]
+        scores = [math.inf for _ in range(self.n_configurations)]
+        candidates = [None for _ in range(self.n_configurations)]
+
+        stats = {tuple(c[1]): None for c in configurations}
 
         results = []
         for i in range(self.hyperband_bracket + 1):
@@ -52,17 +56,19 @@ class SuccessiveHalving():
             for score, candidate, configuration in tqdm(zip(scores, candidates, configurations), total=len(configurations), desc=f'Running Round {i} of SH. Evaluating {len(configurations)} configurations with budget of {budget}'):
                 new_score, new_candidate = self.objective.evaluate(
                     classifier=self.classifier,
-                    configuration=configuration,
+                    configuration=configuration[0],
                     budget=budget,
                     x=self.x,
                     y=self.y,
                     eps=self.eps,
                     distance=self.distance,
                     features_min_max=self.features_min_max,
-                    generate_perturbation=generate_perturbation
+                    generate_perturbation=generate_perturbation,
+                    
                 )
                 if new_score < score:
                     results.append(tuple([new_score, new_candidate]))
+                    stats[tuple(configuration[1])] = new_score
                 else:
                     results.append(tuple([score, candidate]))
 
@@ -75,6 +81,11 @@ class SuccessiveHalving():
             results, configurations = list(results), list(configurations)
         scores, candidates = zip(*results)
         scores, candidates = list(scores), list(candidates)
+
+        # update the prior with the new data
+        X = [list(logit) for logit in stats]
+        y = list(stats.values())
+        self.optimizer.update_optimizer(X, y)
 
         return scores, configurations, candidates
 
