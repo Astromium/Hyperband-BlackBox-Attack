@@ -69,9 +69,9 @@ if __name__ == '__main__':
     dimensions = X_test.shape[1]
     BATCH_SIZE = 10#x_clean.shape[0]
     eps = 0.2
-    downsample = 2
+    downsample = 3
     sampler = Sampler()
-    distance = 'l2'
+    distance = 2
     classifier_path = './ressources/model_url.h5'
     seed = 1000
     success_rates_l2 = []
@@ -81,6 +81,36 @@ if __name__ == '__main__':
     history_dict = dict()
     cg = ConfigGenerator(list(range(x_clean.shape[1])))
     optimizer = BayesianOptimizer(cg=cg, n_jobs=-1) 
+
+    scores, configs, candidates = [], [], []
+    url_evaluator = TorchEvaluator(constraints=constraints, scaler=scaler, alpha=0.5, beta=0.5)
+    R=81
+    start = timeit.default_timer()
+    for i in range(BATCH_SIZE):
+        hp = Hyperband(objective=url_evaluator, classifier=model, x=x_clean[i], y=y_clean[i], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=downsample, distance=distance, seed=seed, optimizer=optimizer, config_generator=cg)
+        all_scrores, all_configs, all_candidates = hp.generate(mutables=None, features_min_max=(0,1))
+
+        scores.append(all_scrores)
+        configs.append(all_configs)
+        candidates.append(all_candidates)
+
+    end = timeit.default_timer()
+    print(f'Exec time {round((end - start) / 60, 3)}')
+    success_rate_calculator = TorchCalculator(classifier=model, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates)
+    success_rate, best_candidates, adversarials = success_rate_calculator.evaluate()
+    print(f'success rate {success_rate}, len best_candidates {len(best_candidates)}, len adversarials {len(adversarials)}')
+    adversarials, best_candidates = scaler.inverse_transform(np.array(adversarials)), scaler.inverse_transform(np.array(best_candidates))
+        #print(f'\n Execution Time {round((end - start) / 60, 3)}\n')
+        #print(f'Success rate over {BATCH_SIZE} examples (M) : {success_rate * 100}')
+        #print(f'len adversarials {len(adversarials)}')
+    violations = np.array([executor.execute(adv[np.newaxis, :])[0] for adv in adversarials])
+    violations_candidates = np.array([executor.execute(adv[np.newaxis, :])[0] for adv in best_candidates])
+    tolerance = 0.0001
+    satisfaction = (violations < tolerance).astype('int').sum()
+    satisfaction_candidates = (violations_candidates < tolerance).astype('int').sum()
+        #print(f'Constraints satisfaction (C&M) {(success_rate * 100) - satisfaction}')
+    history_dict = {'M': round(success_rate * 100, 2), 'C&M': round((satisfaction * 100) / BATCH_SIZE, 2), 'C': round((satisfaction_candidates * 100) / len(best_candidates), 2), 'Execution time': round((end - start) / 60, 3)}
+    print(history_dict)
     '''
     for eps in perturbations:
         start = timeit.default_timer()
@@ -106,7 +136,7 @@ if __name__ == '__main__':
     args_correct = (preds == y_clean[:BATCH_SIZE]).astype('int')
     x_correct, y_correct = x_clean[args_correct], y_clean[args_correct]
     '''
-        
+    '''  
     for R in R_values:
         url_evaluator = TorchEvaluator(constraints=constraints, scaler=scaler, alpha=0.5, beta=0.5)
         scores, configs, candidates = [], [], []
@@ -135,6 +165,7 @@ if __name__ == '__main__':
     print(f'History {history_dict}')
     with open('history.pkl', 'wb') as f:
         pickle.dump(history_dict, f)
+    '''
     
     #scores = softmax(model.predict(np.array(adversarials)), axis=1)
     #print(f'scores {scores}')

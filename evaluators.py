@@ -70,7 +70,7 @@ class TorchEvaluator(Evaluator):
         self.beta = beta
     
     
-    def evaluate(self, classifier: Any, configuration: tuple, budget: int, x: NDArray, y: int, eps: float, distance: str, features_min_max: Union[tuple, None], generate_perturbation: Callable, history: Dict, candidate: NDArray):
+    def evaluate(self, classifier: Any, configuration: tuple, budget: int, x: NDArray, y: int, eps: float, distance: str, features_min_max: Union[tuple, None], generate_perturbation: Callable, candidate: NDArray):
         score = 0.0
         best_score = math.inf
         best_adversarial = None
@@ -82,7 +82,7 @@ class TorchEvaluator(Evaluator):
         for i in range(budget):
             perturbation = generate_perturbation(shape=np.array(configuration).shape, eps=eps, distance=distance)
             #perturbation = np.random.randn(*np.array(configuration).shape)
-            adv[list(configuration)] += perturbation
+            adv[configuration] += perturbation
             # clipping into min-max values
             #if features_min_max:
             adv = np.clip(adv, features_min_max[0], features_min_max[1])

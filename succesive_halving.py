@@ -39,9 +39,12 @@ class SuccessiveHalving():
 
         # Sample without prior if first bracket
         if self.is_first:
+            print('Generating configurations')
             configurations = self.config_generator.get_configurations(n_sample=self.n_configurations, logits=None)
         else:
+            print('Sampling logits from prior')
             logits = self.optimizer.get_next(n_samples=self.n_configurations)
+            print('Getting configs from logits')
             configurations = self.config_generator.get_configurations(n_sample=self.n_configurations, logits=logits)
         #print(f'Configurations {configurations}')
 
@@ -64,6 +67,7 @@ class SuccessiveHalving():
                     distance=self.distance,
                     features_min_max=self.features_min_max,
                     generate_perturbation=generate_perturbation,
+                    candidate=candidate
                     
                 )
                 if new_score < score:
@@ -83,6 +87,7 @@ class SuccessiveHalving():
         scores, candidates = list(scores), list(candidates)
 
         # update the prior with the new data
+        print(list(stats.values()))
         X = [list(logit) for logit in stats]
         y = list(stats.values())
         self.optimizer.update_optimizer(X, y)
