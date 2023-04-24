@@ -55,6 +55,8 @@ if __name__ == '__main__':
     metadata = pd.read_csv('./ressources/url_metadata.csv')
     min_constraints = metadata['min'].to_list()[:63]
     max_constraints = metadata['max'].to_list()[:63]
+    feature_types = metadata['type'].to_list()[:63]
+    int_features = np.where(np.array(feature_types) == 'int')[0]
     features_min_max = (min_constraints, max_constraints)
 
     constraints = get_url_relation_constraints()
@@ -109,14 +111,14 @@ if __name__ == '__main__':
     '''
         
     for R in R_values:
-        url_evaluator = TorchEvaluator(constraints=constraints, scaler=scaler, alpha=0.5, beta=0.5)
+        url_evaluator = TorchEvaluator(constraints=constraints, scaler=scaler, alpha=1.0, beta=1.0)
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
         
         hp = Hyperband(objective=url_evaluator, classifier=model, x=x_clean[:BATCH_SIZE], y=y_clean[:BATCH_SIZE], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=downsample, distance=distance, seed=seed)
         profiler = cProfile.Profile()
         profiler.enable()
-        scores, configs, candidates, _ = hp.generate(mutables=None, features_min_max=(0,1))
+        scores, configs, candidates, _ = hp.generate(mutables=None, features_min_max=(min_constraints,max_constraints), int_features=int_features)
         profiler.disable()
         stats = pstats.Stats(profiler).sort_stats(pstats.SortKey.TIME)
         stats.print_stats()

@@ -70,7 +70,7 @@ class TorchEvaluator(Evaluator):
         self.beta = beta
     
     
-    def evaluate(self, classifier: Any, configuration: tuple, budget: int, x: NDArray, y: int, eps: float, distance: str, features_min_max: Union[tuple, None], generate_perturbation: Callable, history: Dict, candidate: NDArray):
+    def evaluate(self, classifier: Any, configuration: tuple, budget: int, x: NDArray, y: int, eps: float, distance: str, features_min_max: Union[tuple, None], int_features: Union[NDArray, None], generate_perturbation: Callable, history: Dict, candidate: NDArray):
         score = 0.0
         best_score = math.inf
         best_adversarial = None
@@ -85,21 +85,24 @@ class TorchEvaluator(Evaluator):
             adv[list(configuration)] += perturbation
             # clipping into min-max values
             #if features_min_max:
-            adv = np.clip(adv, features_min_max[0], features_min_max[1])
+            #adv = np.clip(adv, features_min_max[0], features_min_max[1])
             # projecting into the Lp-ball
             #norm = 2 if distance == 'l2' else np.inf
             dist = np.linalg.norm(adv - x, ord=distance)
             if dist > eps:
                 #print('Projecting')
                 adv = x + (adv - x) * eps / dist
+                #adv = np.copy(x)
             
 
             pred = classifier.predict_proba(adv[np.newaxis, :])[0]
             violations = 0.0
             #if self.constraints:
                 #if self.scaler:
-            adv_rescaled = self.scaler.inverse_transform(adv[np.newaxis, :])
-            violations = self.constraint_executor.execute(adv_rescaled)[0]
+            adv_rescaled = self.scaler.inverse_transform(adv[np.newaxis, :])[0]
+            adv_rescaled = np.clip(adv_rescaled, features_min_max[0], features_min_max[1])
+            adv_rescaled[int_features] = adv_rescaled[int_features].astype('int')
+            violations = self.constraint_executor.execute(adv_rescaled[np.newaxis, :])[0]
             scores[i] = (self.alpha * pred[y] + self.beta * violations, np.copy(adv)) 
             #history[tuple(configuration)].append(score)
             #score = self.alpha + self.beta * violations
