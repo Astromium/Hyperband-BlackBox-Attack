@@ -57,10 +57,11 @@ class Hyperband():
              'mutables': mutables,
              'features_min_max': features_min_max,
              'int_features': int_features,
-             'n_configurations': max(int((B * (self.downsample ** i)) / (self.R * (i + 1))), 1),
-             'bracket_budget': max(int(self.R / (self.downsample ** i)), 1),
+             'n_configurations': max(round((B * (self.downsample ** i)) / (self.R * (i + 1))), 1),
+             'bracket_budget': max(round(self.R / (self.downsample ** i)), 1),
              'seed': self.seed,
              'hyperband_bracket': i,
+             'R': self.R
             } 
             for i in reversed(range(s_max + 1)) 
         ]
@@ -77,17 +78,23 @@ class Hyperband():
         global_configs = []
         global_candidates = []
         global_history = []
+        global_misclassifs = []
+        global_viols = []
         for i in range(self.x.shape[0]):
-            scores, configs, candidates, history = [], [], [], []
+            scores, configs, candidates, history, history_misclassif, history_viols = [], [], [], [], [], []
             for th in results:
                 scores.extend(th[i][0])
                 configs.extend(th[i][1])
                 candidates.extend(th[i][2])
                 history.append(th[i][3])
+                history_misclassif.append(th[i][4])
+                history_viols.append(th[i][5])
             global_scores.append(scores)
             global_configs.append(configs)
             global_candidates.append(candidates)
             global_history.extend(history)
+            global_misclassifs.extend(history_misclassif)
+            global_viols.extend(history_viols)
 
         # for b in zip(*results):
         #     scores, configs, candidates = [], [], []
@@ -157,6 +164,6 @@ class Hyperband():
             all_candidates.extend(candidates)
             '''
         #print(f'global history {global_history}')
-        return global_scores, global_configs, global_candidates, global_history
+        return global_scores, global_configs, global_candidates, global_history, global_misclassifs, global_viols
 
 

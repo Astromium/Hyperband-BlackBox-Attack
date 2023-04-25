@@ -68,7 +68,7 @@ if __name__ == '__main__':
 
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
-    BATCH_SIZE = x_clean.shape[0]
+    BATCH_SIZE = 100#x_clean.shape[0]
     eps = 0.2
     downsample = 3
     sampler = Sampler()
@@ -79,7 +79,7 @@ if __name__ == '__main__':
     success_rates_l2 = []
     exec_times_l2 = []
 
-    R_values = [81]
+    R_values = [243]
     history_dict = dict()
     '''
     for eps in perturbations:
@@ -111,18 +111,18 @@ if __name__ == '__main__':
     '''
         
     for R in R_values:
-        url_evaluator = TorchEvaluator(constraints=constraints, scaler=scaler, alpha=1.0, beta=1.0)
+        url_evaluator = TorchEvaluator(constraints=constraints, scaler=scaler, alpha=0.9, beta=0.1)
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
         
         hp = Hyperband(objective=url_evaluator, classifier=model, x=x_clean[:BATCH_SIZE], y=y_clean[:BATCH_SIZE], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=downsample, distance=distance, seed=seed)
         profiler = cProfile.Profile()
         profiler.enable()
-        scores, configs, candidates, _ = hp.generate(mutables=None, features_min_max=(min_constraints,max_constraints), int_features=int_features)
+        scores, configs, candidates, _, _, _ = hp.generate(mutables=None, features_min_max=(min_constraints,max_constraints), int_features=int_features)
         profiler.disable()
-        stats = pstats.Stats(profiler).sort_stats(pstats.SortKey.TIME)
-        stats.print_stats()
-        stats.dump_stats('results.prof')
+        #stats = pstats.Stats(profiler).sort_stats(pstats.SortKey.TIME)
+        #stats.print_stats()
+        #stats.dump_stats('results.prof')
 
         end = timeit.default_timer()
         print(f'Exec time {round((end - start) / 60, 3)}')

@@ -75,6 +75,8 @@ class TorchEvaluator(Evaluator):
         best_score = math.inf
         best_adversarial = None
         scores = [0] * budget
+        misclassif = [0] * budget
+        viols = [0] * budget
         if candidate is None:
             adv = np.copy(x)
         else:
@@ -104,6 +106,8 @@ class TorchEvaluator(Evaluator):
             adv_rescaled[int_features] = adv_rescaled[int_features].astype('int')
             violations = self.constraint_executor.execute(adv_rescaled[np.newaxis, :])[0]
             scores[i] = (self.alpha * pred[y] + self.beta * violations, np.copy(adv)) 
+            misclassif[i] = pred[y]
+            viols[i] = violations
             #history[tuple(configuration)].append(score)
             #score = self.alpha + self.beta * violations
             '''
@@ -122,9 +126,11 @@ class TorchEvaluator(Evaluator):
             #if dist > eps:
                 #best_adversarial = x + (best_adversarial - x) * eps / dist
         scores = sorted(scores, key=lambda k: k[0])
+        misclassif = sorted(misclassif)
+        viols = sorted(viols)
         #dist = np.linalg.norm(x - best_adversarial, ord=distance)
         #print(f'dist before returning {dist}')
-        return round(scores[0][0], 3), scores[0][1]
+        return round(scores[0][0], 3), scores[0][1], misclassif[0], viols[0]
     
 class SickitEvaluator(Evaluator):
     def __init__(self, constraints: Union[List[BaseRelationConstraint], None], scaler: Union[MinMaxScaler, None], alpha: float, beta: float):

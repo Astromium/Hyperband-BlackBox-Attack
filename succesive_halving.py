@@ -29,9 +29,9 @@ class SuccessiveHalving():
     int_features: Union[NDArray, None]
     seed: int
     hyperband_bracket: int
-
-    def process_one(self, candidate, idx, configuration, budget, history):
-        new_score, new_candidate = self.objective.evaluate(
+    R: int
+    def process_one(self, candidate, idx, configuration, budget, history, history_mis, history_vio):
+        new_score, new_candidate, misclassif, viol = self.objective.evaluate(
            classifier=self.classifier,
             configuration=configuration,
             budget=budget,
@@ -46,6 +46,8 @@ class SuccessiveHalving():
             candidate=candidate 
         )
         history[tuple(configuration)].append(new_score)
+        history_mis[tuple(configuration)].append(misclassif)
+        history_vio[tuple(configuration)].append(viol)
         return new_score, new_candidate
         #if new_score < score:
             #return tuple([new_score, new_candidate])
@@ -113,14 +115,16 @@ class SuccessiveHalving():
                 seed=self.seed
             )
             history = {tuple(c): [1.2] for c in configurations}
+            history_mis = {tuple(c): [1.0] for c in configurations}
+            history_vio = {tuple(c): [] for c in configurations}
             #history = {}
 
             #scores = [math.inf for s in range(len(configurations))]
             #candidates = [None for c in range(len(configurations))]
 
             for i in range(self.hyperband_bracket + 1):
-                budget = self.bracket_budget * pow(self.downsample, i)
-                results = [self.process_one(candidate=None, idx=idx, configuration=configuration, budget=budget, history=history) for configuration in configurations]
+                budget = self.bracket_budget * pow(self.downsample, i) if self.bracket_budget * pow(self.downsample, i) < self.R else self.R
+                results = [self.process_one(candidate=None, idx=idx, configuration=configuration, budget=budget, history=history, history_mis=history_mis, history_vio=history_vio) for configuration in tqdm(configurations, total=len(configurations), desc=f'SH round {i}, Evaluating {len(configurations)} with budget of {budget}')]
                 
                 scores = [r[0] for r in results]
                 candidates = [r[1] for r in results]
@@ -164,7 +168,7 @@ class SuccessiveHalving():
             
                 #print(f'scores of round {i} {scores}')
             #print(f'len scores {len(scores)}, len configs {len(configurations)}, len candidates {len(candidates)}')
-            all_results.append((scores, configurations, candidates, history))
+            all_results.append((scores, configurations, candidates, history, history_mis, history_vio))
         return all_results
         
         
