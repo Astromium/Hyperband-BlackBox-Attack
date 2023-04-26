@@ -90,21 +90,26 @@ class TorchEvaluator(Evaluator):
             #adv = np.clip(adv, features_min_max[0], features_min_max[1])
             # projecting into the Lp-ball
             #norm = 2 if distance == 'l2' else np.inf
-            dist = np.linalg.norm(adv - x, ord=distance)
-            if dist > eps:
-                #print('Projecting')
-                adv = x + (adv - x) * eps / dist
-                #adv = np.copy(x)
             
-
+            adv_scaled = self.scaler.transform(adv[np.newaxis, :])[0]
+            x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
+            dist = np.linalg.norm(adv_scaled - x_scaled, ord=distance)
+            if dist > 0.2:
+                #print('Projecting')
+                adv_scaled = x_scaled + (adv_scaled - x_scaled) * 0.2 / dist
+                #adv = np.copy(x)
+            #print(f'dist scaled after {np.linalg.norm(adv_scaled - x_scaled, ord=distance)}')
+            adv = self.scaler.inverse_transform(adv_scaled[np.newaxis, :])[0]
             pred = classifier.predict_proba(adv[np.newaxis, :])[0]
             violations = 0.0
             #if self.constraints:
                 #if self.scaler:
-            adv_rescaled = self.scaler.inverse_transform(adv[np.newaxis, :])[0]
-            adv_rescaled = np.clip(adv_rescaled, features_min_max[0], features_min_max[1])
-            adv_rescaled[int_features] = adv_rescaled[int_features].astype('int')
-            violations = self.constraint_executor.execute(adv_rescaled[np.newaxis, :])[0]
+            #adv_rescaled = self.scaler.inverse_transform(adv[np.newaxis, :])[0]
+            #adv_rescaled = np.clip(adv_rescaled, features_min_max[0], features_min_max[1])
+            #adv_rescaled[int_features] = adv_rescaled[int_features].astype('int')
+            adv = np.clip(adv, features_min_max[0], features_min_max[1])
+            adv[int_features] = adv[int_features].astype('int')
+            violations = self.constraint_executor.execute(adv[np.newaxis, :])[0]
             scores[i] = (self.alpha * pred[y] + self.beta * violations, np.copy(adv)) 
             misclassif[i] = pred[y]
             viols[i] = violations
