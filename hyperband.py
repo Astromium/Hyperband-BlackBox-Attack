@@ -73,7 +73,7 @@ class Hyperband():
         p.join()
         '''
         
-        results = Parallel(n_jobs=s_max+1, verbose=0, backend='multiprocessing', prefer='processes')(delayed(run_worker)(params[i]) for i in range(s_max + 1))
+        results = Parallel(n_jobs=1, verbose=0, backend='multiprocessing', prefer='processes')(delayed(run_worker)(params[i]) for i in range(s_max + 1))
         global_scores = []
         global_configs = []
         global_candidates = []

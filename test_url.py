@@ -68,15 +68,15 @@ if __name__ == '__main__':
     model_tf = TensorflowClassifier(load_model(r'ressources\baseline_nn.model'))
     model = Net()
     model = torch.load('./ressources/model_url.pth')
-    model = wrap_model(model, x_clean, model_task='classification')
+    model = wrap_model(model_tf, x_clean, model_task='classification')
     rf = joblib.load('./ressources/baseline_rf.model')
-    model_pipeline = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', model_tf)])
+    model_pipeline = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', model)])
 
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
     BATCH_SIZE = 100#x_clean.shape[0]
     eps = 100
-    downsample = 2
+    downsample = 3
     sampler = Sampler()
     distance = 2
     classifier_path = './ressources/model_url.h5'
@@ -85,7 +85,7 @@ if __name__ == '__main__':
     success_rates_l2 = []
     exec_times_l2 = []
 
-    R_values = [256]
+    R_values = [81]
     history_dict = dict()
     '''
     for eps in perturbations:
