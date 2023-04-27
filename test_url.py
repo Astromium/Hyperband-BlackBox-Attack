@@ -1,14 +1,16 @@
+import pstats
+import cProfile
 import warnings
 import pickle
 import joblib
 import timeit
 from utils.model import Net
-from sklearn.pipeline import Pipeline
 from ml_wrappers import wrap_model
 from constraints.relation_constraint import AndConstraint
 from constraints.url_constraints import get_url_relation_constraints
 from constraints.constraints_executor import NumpyConstraintsExecutor
 from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
 from utils.sr_calculators import TorchCalculator
 from sampler import Sampler
 from evaluators import TorchEvaluator
@@ -56,6 +58,8 @@ if __name__ == '__main__':
     metadata = pd.read_csv('./ressources/url_metadata.csv')
     min_constraints = metadata['min'].to_list()[:63]
     max_constraints = metadata['max'].to_list()[:63]
+    feature_types = metadata['type'].to_list()[:63]
+    int_features = np.where(np.array(feature_types) == 'int')[0]
     features_min_max = (min_constraints, max_constraints)
 
     constraints = get_url_relation_constraints()
@@ -74,9 +78,10 @@ if __name__ == '__main__':
     eps = 0.2
     downsample = 3
     sampler = Sampler()
-    distance = 'l2'
+    distance = 2
     classifier_path = './ressources/model_url.h5'
     seed = 202374
+    np.random.seed(seed)
     success_rates_l2 = []
     exec_times_l2 = []
 
@@ -113,14 +118,20 @@ if __name__ == '__main__':
 
     for R in R_values:
         url_evaluator = TorchEvaluator(
-            constraints=constraints, scaler=scaler, alpha=0.5, beta=0.5)
+            constraints=constraints, scaler=scaler, alpha=0.9, beta=0.1)
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
+
         hp = Hyperband(objective=url_evaluator, classifier=model, x=x_clean[:BATCH_SIZE], y=y_clean[:BATCH_SIZE], sampler=sampler,
                        eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=downsample, distance=distance, seed=seed)
-
-        scores, configs, candidates = hp.generate(
-            mutables=None, features_min_max=(0, 1))
+        profiler = cProfile.Profile()
+        profiler.enable()
+        scores, configs, candidates, _, _, _ = hp.generate(mutables=None, features_min_max=(
+            min_constraints, max_constraints), int_features=int_features)
+        profiler.disable()
+        # stats = pstats.Stats(profiler).sort_stats(pstats.SortKey.TIME)
+        # stats.print_stats()
+        # stats.dump_stats('results.prof')
 
         end = timeit.default_timer()
         print(f'Exec time {round((end - start) / 60, 3)}')
