@@ -7,11 +7,16 @@ from constraints.relation_constraint import BaseRelationConstraint
 from constraints.constraints_executor import NumpyConstraintsExecutor
 from constraints.relation_constraint import AndConstraint
 from sklearn.preprocessing import MinMaxScaler
+from utils.mutation_generator import generate_mutations
 import numpy as np
 import math
 
 @dataclass
 class Evaluator(ABC):
+
+    @abstractmethod
+    def evaluate_mutations(self, classifier: Any, configuration: tuple, budget: int, x: NDArray, y: int, eps: float, distance: str, features_min_max: Union[tuple, None]):
+        pass
 
     @abstractmethod
     def evaluate(self, classifier: Any, configuration: tuple, budget: int, x: NDArray, y: int, eps: float, distance: str, features_min_max: Union[tuple, None]):
@@ -68,7 +73,32 @@ class TorchEvaluator(Evaluator):
         self.scaler = scaler
         self.alpha = alpha
         self.beta = beta
-    
+
+    def process_mutant(self, xm, x, y, features_min_max, int_features, classifier):
+        xm_scaled = self.scaler.transform(xm[np.newaxis, :])[0]
+        x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
+        dist = np.linalg.norm(xm_scaled - x_scaled)
+        if dist > 0.2:
+            xm_scaled = x_scaled + (xm_scaled - x_scaled) * 0.2 / dist
+            xm = self.scaler.inverse_transform(xm_scaled[np.newaxis, :])[0]
+        # clipping
+        xm = np.clip(xm, features_min_max[0], features_min_max[1])
+        # casting
+        xm[int_features] = xm[int_features].astype('int')
+            
+        pred = classifier.predict_proba(xm[np.newaxis, :])[0]
+        violations = self.constraint_executor.execute(xm[np.newaxis, :])[0]
+        return (self.alpha * pred[y] + self.beta * violations, np.copy(xm))
+
+
+    def evaluate_mutations(self, classifier: Any, configuration: tuple, budget: int, x: NDArray, y: int, eps: float, distance: str, features_min_max: Union[tuple, None], int_features: Union[NDArray, None], generate_perturbation: Callable, history: Dict, candidate: NDArray):
+        mutations = generate_mutations(pop_size=budget, features_min_max=features_min_max, x=x)
+        scores = [self.process_mutant(xm=mutant, x=x, y=y, features_min_max=features_min_max, int_features=int_features, classifier=classifier) for mutant in mutations]
+        scores = sorted(scores, key=lambda k: k[0])
+        return round(scores[0][0], 3), scores[0][1], 0, 0
+
+        
+        
     
     def evaluate(self, classifier: Any, configuration: tuple, budget: int, x: NDArray, y: int, eps: float, distance: str, features_min_max: Union[tuple, None], int_features: Union[NDArray, None], generate_perturbation: Callable, history: Dict, candidate: NDArray):
         score = 0.0
@@ -82,37 +112,33 @@ class TorchEvaluator(Evaluator):
         else:
             adv = np.copy(candidate)
         for i in range(budget):
-            perturbation = generate_perturbation(shape=np.array(configuration).shape, eps=eps, distance=distance)
-            #perturbation = np.random.randn(*np.array(configuration).shape)
+            #perturbation = generate_perturbation(shape=np.array(configuration).shape, eps=eps, distance=distance)
+            perturbation = generate_perturbation(configuration=configuration, features_min=features_min_max[0], features_max=features_min_max[1], x=x)
             adv[list(configuration)] += perturbation
-            # clipping into min-max values
-            #if features_min_max:
-            #adv = np.clip(adv, features_min_max[0], features_min_max[1])
-            # projecting into the Lp-ball
-            #norm = 2 if distance == 'l2' else np.inf
+            dist = np.linalg.norm(adv - x, ord=distance)
+            #print(f'dist after perturbating {dist}')
             
             adv_scaled = self.scaler.transform(adv[np.newaxis, :])[0]
             x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
             dist = np.linalg.norm(adv_scaled - x_scaled, ord=distance)
-            if dist > 0.2:
-                #print('Projecting')
-                adv_scaled = x_scaled + (adv_scaled - x_scaled) * 0.2 / dist
-                #adv = np.copy(x)
-            #print(f'dist scaled after {np.linalg.norm(adv_scaled - x_scaled, ord=distance)}')
-            adv = self.scaler.inverse_transform(adv_scaled[np.newaxis, :])[0]
-            pred = classifier.predict_proba(adv[np.newaxis, :])[0]
-            violations = 0.0
-            #if self.constraints:
-                #if self.scaler:
-            #adv_rescaled = self.scaler.inverse_transform(adv[np.newaxis, :])[0]
-            #adv_rescaled = np.clip(adv_rescaled, features_min_max[0], features_min_max[1])
-            #adv_rescaled[int_features] = adv_rescaled[int_features].astype('int')
+            #print(f'dist before projection {dist}')
+            if dist > eps:
+                adv_scaled = x_scaled + (adv_scaled - x_scaled) * eps / dist
+                # transform back to pb space    
+                adv = self.scaler.inverse_transform(adv_scaled[np.newaxis, :])[0]
+            #dist = np.linalg.norm(adv_scaled - x_scaled, ord=distance)
+            #print(f'dist after projection {dist}')
+            # clipping
             adv = np.clip(adv, features_min_max[0], features_min_max[1])
+            # casting
             adv[int_features] = adv[int_features].astype('int')
+            #dist = np.linalg.norm(adv - x, ord=distance)
+            #print(f'dist at the end {dist}')
+            pred = classifier.predict_proba(adv[np.newaxis, :])[0]
             violations = self.constraint_executor.execute(adv[np.newaxis, :])[0]
             scores[i] = (self.alpha * pred[y] + self.beta * violations, np.copy(adv)) 
-            misclassif[i] = pred[y]
-            viols[i] = violations
+            #misclassif[i] = pred[y]
+            #viols[i] = violations
             #history[tuple(configuration)].append(score)
             #score = self.alpha + self.beta * violations
             '''
