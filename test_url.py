@@ -1,25 +1,27 @@
+import warnings
+import pickle
+import joblib
+import timeit
+from utils.model import Net
+from sklearn.pipeline import Pipeline
+from ml_wrappers import wrap_model
+from constraints.relation_constraint import AndConstraint
+from constraints.url_constraints import get_url_relation_constraints
+from constraints.constraints_executor import NumpyConstraintsExecutor
+from sklearn.model_selection import train_test_split
+from utils.sr_calculators import TorchCalculator
+from sampler import Sampler
+from evaluators import TorchEvaluator
+from hyperband import Hyperband
+import pandas as pd
+import numpy as np
+import torch
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-import torch
-import numpy as np
-import pandas as pd
-from hyperband import Hyperband
-from evaluators import TorchEvaluator
-from sampler import Sampler
-from utils.sr_calculators import TorchCalculator
-from sklearn.model_selection import train_test_split
-from constraints.constraints_executor import NumpyConstraintsExecutor
-from constraints.url_constraints import get_url_relation_constraints
-from constraints.relation_constraint import AndConstraint
-from ml_wrappers import wrap_model
-from utils.model import Net
-import timeit
-import joblib
-import pickle
-import warnings
 warnings.filterwarnings(action='ignore')
 
-scaler = preprocessing_pipeline = joblib.load('./ressources/baseline_scaler.joblib')
+scaler = preprocessing_pipeline = joblib.load(
+    './ressources/baseline_scaler.joblib')
 
 
 if __name__ == '__main__':
@@ -37,8 +39,8 @@ if __name__ == '__main__':
         test_size=0.2
     )
 
-    #scaler = MinMaxScaler()
-    
+    # scaler = MinMaxScaler()
+
     X = scaler.transform(X)
     X_train, X_test = X[i_train], X[i_test]
     y_train, y_test = y[i_train], y[i_test]
@@ -48,9 +50,9 @@ if __name__ == '__main__':
 
     x_clean = np.load('./ressources/baseline_X_test_candidates.npy')
     y_clean = np.load('./ressources/baseline_y_test_candidates.npy')
-    x_clean = scaler.transform(x_clean)
+    # x_clean = scaler.transform(x_clean)
 
-    #model_pipeline = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', rf)])
+    # model_pipeline = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', rf)])
     metadata = pd.read_csv('./ressources/url_metadata.csv')
     min_constraints = metadata['min'].to_list()[:63]
     max_constraints = metadata['max'].to_list()[:63]
@@ -62,20 +64,23 @@ if __name__ == '__main__':
     model = Net()
     model = torch.load('./ressources/model_url.pth')
     model = wrap_model(model, x_clean, model_task='classification')
+    model_pipeline = Pipeline(
+        steps=[("preprocessing", scaler), ("model", model)]
+    )
 
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
-    BATCH_SIZE = 100#x_clean.shape[0]
+    BATCH_SIZE = 200  # x_clean.shape[0]
     eps = 0.2
-    downsample = 2
+    downsample = 3
     sampler = Sampler()
     distance = 'l2'
     classifier_path = './ressources/model_url.h5'
-    seed = 1000
+    seed = 202374
     success_rates_l2 = []
     exec_times_l2 = []
 
-    R_values = [128]
+    R_values = [81]
     history_dict = dict()
     '''
     for eps in perturbations:
@@ -105,39 +110,48 @@ if __name__ == '__main__':
     args_correct = (preds == y_clean[:BATCH_SIZE]).astype('int')
     x_correct, y_correct = x_clean[args_correct], y_clean[args_correct]
     '''
-        
+
     for R in R_values:
-        url_evaluator = TorchEvaluator(constraints=constraints, scaler=scaler, alpha=0.5, beta=0.5)
+        url_evaluator = TorchEvaluator(
+            constraints=constraints, scaler=scaler, alpha=0.5, beta=0.5)
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
-        
-        hp = Hyperband(objective=url_evaluator, classifier=model, x=x_clean[:BATCH_SIZE], y=y_clean[:BATCH_SIZE], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=downsample, distance=distance, seed=seed)
-        scores, configs, candidates = hp.generate(mutables=None, features_min_max=(0,1))
+        hp = Hyperband(objective=url_evaluator, classifier=model, x=x_clean[:BATCH_SIZE], y=y_clean[:BATCH_SIZE], sampler=sampler,
+                       eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=downsample, distance=distance, seed=seed)
+
+        scores, configs, candidates = hp.generate(
+            mutables=None, features_min_max=(0, 1))
 
         end = timeit.default_timer()
         print(f'Exec time {round((end - start) / 60, 3)}')
-        success_rate_calculator = TorchCalculator(classifier=model, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates)
+        success_rate_calculator = TorchCalculator(
+            classifier=model_pipeline, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates)
         success_rate, best_candidates, adversarials = success_rate_calculator.evaluate()
-        print(f'success rate {success_rate}, len best_candidates {len(best_candidates)}, len adversarials {len(adversarials)}')
-        adversarials, best_candidates = scaler.inverse_transform(np.array(adversarials)), scaler.inverse_transform(np.array(best_candidates))
-        #print(f'\n Execution Time {round((end - start) / 60, 3)}\n')
-        #print(f'Success rate over {BATCH_SIZE} examples (M) : {success_rate * 100}')
-        #print(f'len adversarials {len(adversarials)}')
-        violations = np.array([executor.execute(adv[np.newaxis, :])[0] for adv in adversarials])
-        violations_candidates = np.array([executor.execute(adv[np.newaxis, :])[0] for adv in best_candidates])
+        print(
+            f'success rate {success_rate}, len best_candidates {len(best_candidates)}, len adversarials {len(adversarials)}')
+        adversarials, best_candidates = scaler.inverse_transform(
+            np.array(adversarials)), scaler.inverse_transform(np.array(best_candidates))
+        # print(f'\n Execution Time {round((end - start) / 60, 3)}\n')
+        # print(f'Success rate over {BATCH_SIZE} examples (M) : {success_rate * 100}')
+        # print(f'len adversarials {len(adversarials)}')
+        violations = np.array(
+            [executor.execute(adv[np.newaxis, :])[0] for adv in adversarials])
+        violations_candidates = np.array(
+            [executor.execute(adv[np.newaxis, :])[0] for adv in best_candidates])
         tolerance = 0.0001
         satisfaction = (violations < tolerance).astype('int').sum()
-        satisfaction_candidates = (violations_candidates < tolerance).astype('int').sum()
-        #print(f'Constraints satisfaction (C&M) {(success_rate * 100) - satisfaction}')
-        history_dict[R] = {'M': round(success_rate * 100, 2), 'C&M': round((satisfaction * 100) / BATCH_SIZE, 2), 'C': round((satisfaction_candidates * 100) / len(best_candidates), 2), 'Execution time': round((end - start) / 60, 3)}
-    
+        satisfaction_candidates = (
+            violations_candidates < tolerance).astype('int').sum()
+        # print(f'Constraints satisfaction (C&M) {(success_rate * 100) - satisfaction}')
+        history_dict[R] = {'M': round(success_rate * 100, 2), 'C&M': round((satisfaction * 100) / BATCH_SIZE, 2), 'C': round(
+            (satisfaction_candidates * 100) / len(best_candidates), 2), 'Execution time': round((end - start) / 60, 3)}
+
     print(f'History {history_dict}')
     with open('history.pkl', 'wb') as f:
         pickle.dump(history_dict, f)
-    
-    #scores = softmax(model.predict(np.array(adversarials)), axis=1)
-    #print(f'scores {scores}')
-    #print(f'Violations for x_clean {[executor.execute(x[np.newaxis, :]) for x in x_clean]}')
-    #dist = np.linalg.norm(adversarials[0][0] - X_test_phishing[0])
-    #print(f'dist {dist}')
-    
+
+    # scores = softmax(model.predict(np.array(adversarials)), axis=1)
+    # print(f'scores {scores}')
+    # print(f'Violations for x_clean {[executor.execute(x[np.newaxis, :]) for x in x_clean]}')
+    # dist = np.linalg.norm(adversarials[0][0] - X_test_phishing[0])
+    # print(f'dist {dist}')
