@@ -117,7 +117,7 @@ if __name__ == '__main__':
     '''
         
     for R in R_values:
-        url_evaluator = TorchEvaluator(constraints=constraints, scaler=scaler, alpha=0.9, beta=0.1)
+        url_evaluator = TorchEvaluator(constraints=constraints, scaler=scaler, alpha=1.0, beta=1.0)
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
         
@@ -137,9 +137,7 @@ if __name__ == '__main__':
         success_rate, best_candidates, adversarials = success_rate_calculator.evaluate()
         print(f'success rate {success_rate}, len best_candidates {len(best_candidates)}, len adversarials {len(adversarials)}')
         #adversarials, best_candidates = scaler.inverse_transform(np.array(adversarials)), scaler.inverse_transform(np.array(best_candidates))
-        #print(f'\n Execution Time {round((end - start) / 60, 3)}\n')
-        #print(f'Success rate over {BATCH_SIZE} examples (M) : {success_rate * 100}')
-        #print(f'len adversarials {len(adversarials)}')
+
         violations = np.array([executor.execute(adv[np.newaxis, :])[0] for adv in adversarials])
         violations_candidates = np.array([executor.execute(adv[np.newaxis, :])[0] for adv in best_candidates])
         tolerance = 0.0001

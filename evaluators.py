@@ -115,8 +115,6 @@ class TorchEvaluator(Evaluator):
             #perturbation = generate_perturbation(shape=np.array(configuration).shape, eps=eps, distance=distance)
             perturbation = generate_perturbation(configuration=configuration, features_min=features_min_max[0], features_max=features_min_max[1], x=x)
             adv[list(configuration)] += perturbation
-            dist = np.linalg.norm(adv - x, ord=distance)
-            #print(f'dist after perturbating {dist}')
             
             adv_scaled = self.scaler.transform(adv[np.newaxis, :])[0]
             x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
@@ -126,14 +124,12 @@ class TorchEvaluator(Evaluator):
                 adv_scaled = x_scaled + (adv_scaled - x_scaled) * eps / dist
                 # transform back to pb space    
                 adv = self.scaler.inverse_transform(adv_scaled[np.newaxis, :])[0]
-            #dist = np.linalg.norm(adv_scaled - x_scaled, ord=distance)
-            #print(f'dist after projection {dist}')
+         
             # clipping
             adv = np.clip(adv, features_min_max[0], features_min_max[1])
             # casting
             adv[int_features] = adv[int_features].astype('int')
             #dist = np.linalg.norm(adv - x, ord=distance)
-            #print(f'dist at the end {dist}')
             pred = classifier.predict_proba(adv[np.newaxis, :])[0]
             violations = self.constraint_executor.execute(adv[np.newaxis, :])[0]
             scores[i] = (self.alpha * pred[y] + self.beta * violations, np.copy(adv)) 

@@ -114,7 +114,7 @@ class SuccessiveHalving():
                 mutables_mask=self.mutables,
                 seed=self.seed
             )
-            history = {tuple(c): [1.2] for c in configurations}
+            history = {tuple(c): [] for c in configurations}
             history_mis = {tuple(c): [1.0] for c in configurations}
             history_vio = {tuple(c): [] for c in configurations}
             #history = {}
