@@ -59,7 +59,6 @@ class TorchCalculator(SuccessRateCalculator):
         for i, (x, y) in enumerate(zip(self.data, self.labels)):
             pred = self.classifier.predict(x[np.newaxis, :])[0]
             if pred != y:
-                #print('inside the if')
                 continue
 
             correct += 1
@@ -73,7 +72,7 @@ class TorchCalculator(SuccessRateCalculator):
                 adversarials.append(best_candidate)
                 success_rate += 1
         eps = 0.0001 if correct == 0 else 0
-        
+        print(f'Correct {correct}')
         return round(success_rate / correct + eps, 3), best_candidates, adversarials
     
 

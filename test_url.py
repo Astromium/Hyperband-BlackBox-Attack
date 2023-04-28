@@ -4,6 +4,7 @@ import warnings
 import pickle
 import joblib
 import timeit
+from tensorflow.keras.models import load_model
 from utils.model import Net
 from ml_wrappers import wrap_model
 from constraints.relation_constraint import AndConstraint
@@ -12,6 +13,7 @@ from constraints.constraints_executor import NumpyConstraintsExecutor
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from utils.sr_calculators import TorchCalculator
+from utils.tensorflow_classifier import TensorflowClassifier
 from sampler import Sampler
 from evaluators import TorchEvaluator
 from hyperband import Hyperband
@@ -54,7 +56,6 @@ if __name__ == '__main__':
     y_clean = np.load('./ressources/baseline_y_test_candidates.npy')
     # x_clean = scaler.transform(x_clean)
 
-    # model_pipeline = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', rf)])
     metadata = pd.read_csv('./ressources/url_metadata.csv')
     min_constraints = metadata['min'].to_list()[:63]
     max_constraints = metadata['max'].to_list()[:63]
@@ -65,16 +66,17 @@ if __name__ == '__main__':
     constraints = get_url_relation_constraints()
     executor = NumpyConstraintsExecutor(AndConstraint(constraints))
 
+    model_tf = TensorflowClassifier(
+        load_model(r'ressources\baseline_nn.model'))
     model = Net()
     model = torch.load('./ressources/model_url.pth')
     model = wrap_model(model, x_clean, model_task='classification')
     model_pipeline = Pipeline(
-        steps=[("preprocessing", scaler), ("model", model)]
-    )
+        steps=[('preprocessing', preprocessing_pipeline), ('model', model)])
 
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
-    BATCH_SIZE = 200  # x_clean.shape[0]
+    BATCH_SIZE = 100  # x_clean.shape[0]
     eps = 0.2
     downsample = 3
     sampler = Sampler()
@@ -118,11 +120,11 @@ if __name__ == '__main__':
 
     for R in R_values:
         url_evaluator = TorchEvaluator(
-            constraints=constraints, scaler=scaler, alpha=0.9, beta=0.1)
+            constraints=constraints, scaler=scaler, alpha=1.0, beta=1.0)
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
 
-        hp = Hyperband(objective=url_evaluator, classifier=model, x=x_clean[:BATCH_SIZE], y=y_clean[:BATCH_SIZE], sampler=sampler,
+        hp = Hyperband(objective=url_evaluator, classifier=model_pipeline, x=x_clean[:BATCH_SIZE], y=y_clean[:BATCH_SIZE], sampler=sampler,
                        eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=downsample, distance=distance, seed=seed)
         profiler = cProfile.Profile()
         profiler.enable()
