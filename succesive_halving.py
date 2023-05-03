@@ -8,28 +8,53 @@ from numpy.typing import NDArray
 from sampler import Sampler
 from evaluators import Evaluator
 from utils.perturbation_generator import generate_perturbation
+from utils.tensorflow_classifier import TensorflowClassifier
+from tensorflow.keras.models import load_model
+from sklearn.pipeline import Pipeline
+import joblib
+preprocessing_pipeline = joblib.load('./ressources/baseline_scaler.joblib')
 
-@dataclass
 class SuccessiveHalving():
-    objective: Evaluator
-    classifier: Any
-    sampler: Sampler 
-    x: NDArray
-    y: NDArray 
-    eps: float 
-    dimensions: int 
-    max_configuration_size: int
-    distance: str
-    max_ressources_per_configuration: int
-    downsample: int
-    bracket_budget: int
-    n_configurations: int
-    mutables: Union[List, None]
-    features_min_max: Union[List, None]
-    int_features: Union[NDArray, None]
-    seed: int
-    hyperband_bracket: int
-    R: int
+    def __init__(self, objective: Evaluator,
+    classifier_path: str,
+    sampler: Sampler ,
+    x: NDArray,
+    y: NDArray, 
+    eps: float, 
+    dimensions: int, 
+    max_configuration_size: int,
+    distance: str,
+    max_ressources_per_configuration: int,
+    downsample: int,
+    bracket_budget: int,
+    n_configurations: int,
+    mutables: Union[List, None],
+    features_min_max: Union[List, None],
+    int_features: Union[NDArray, None],
+    seed: int,
+    hyperband_bracket: int,
+    R: int):
+        self.objective = objective
+        self.sampler = sampler
+        self.x = x
+        self.y = y
+        self.eps = eps
+        self.dimensions = dimensions
+        self.max_configuration_size = max_configuration_size
+        self.distance = distance
+        self.max_ressources_per_configuration = max_ressources_per_configuration
+        self.downsample = downsample
+        self.bracket_budget = bracket_budget
+        self.n_configurations = n_configurations
+        self.mutables = mutables
+        self.features_min_max = features_min_max
+        self.int_features = int_features
+        self.seed = seed
+        self.hyperband_bracket = hyperband_bracket
+        self.R = R
+        self.classifier_path = classifier_path
+        self.classifier = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', TensorflowClassifier(load_model(self.classifier_path)))])
+    
     def process_one(self, candidate, idx, configuration, budget, history, history_mis, history_vio):
         new_score, new_candidate, misclassif, viol = self.objective.evaluate(
            classifier=self.classifier,
