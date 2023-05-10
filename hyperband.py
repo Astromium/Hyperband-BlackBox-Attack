@@ -10,18 +10,19 @@ import os
 import math
 
 
-
 print(f'Hello {os.getpid()} from Hyperband')
+
 
 def run_worker(args):
     sh = SuccessiveHalving(**args)
     all_results = sh.run()
     return all_results
 
+
 @dataclass
 class Hyperband():
     objective: Evaluator
-    classifier: Any
+    classifier_path: str
     x: NDArray
     y: NDArray
     sampler: Sampler
@@ -33,25 +34,24 @@ class Hyperband():
     distance: str
     seed: int
 
-
     def generate(self, mutables=None, features_min_max=None, int_features=None):
         if self.downsample <= 1:
             raise ValueError('Downsample must be > 1')
-        
+
         all_scores, all_configurations, all_candidates = [], [], []
         # Number of Hyperband rounds
         s_max = math.floor(math.log(self.R, self.downsample))
         B = self.R * (s_max + 1)
         print(f'Hyperband brackets {s_max + 1}')
-        params = [ 
-            {'objective': self.objective, 
-             'classifier': self.classifier, 
-             'sampler': self.sampler, 
-             'x': self.x, 'y': self.y, 
-             'eps': self.eps, 
-             'dimensions': self.dimensions, 
-             'max_configuration_size': self.max_configuration_size, 
-             'distance': self.distance, 
+        params = [
+            {'objective': self.objective,
+             'classifier_path': self.classifier_path,
+             'sampler': self.sampler,
+             'x': self.x, 'y': self.y,
+             'eps': self.eps,
+             'dimensions': self.dimensions,
+             'max_configuration_size': self.max_configuration_size,
+             'distance': self.distance,
              'max_ressources_per_configuration': self.R,
              'downsample': self.downsample,
              'mutables': mutables,
@@ -62,18 +62,19 @@ class Hyperband():
              'seed': self.seed,
              'hyperband_bracket': i,
              'R': self.R
-            } 
-            for i in reversed(range(s_max + 1)) 
+             }
+            for i in reversed(range(s_max + 1))
         ]
-        
+
         '''
         p = Pool(os.cpu_count())
         results = p.map(run_worker, params)
         p.close()
         p.join()
         '''
-        
-        results = Parallel(n_jobs=s_max+1, verbose=0, backend='multiprocessing', prefer='processes')(delayed(run_worker)(params[i]) for i in range(s_max + 1))
+
+        results = Parallel(n_jobs=s_max+1, verbose=0, backend='multiprocessing',
+                           prefer='processes')(delayed(run_worker)(params[i]) for i in range(s_max + 1))
         global_scores = []
         global_configs = []
         global_candidates = []
@@ -105,23 +106,19 @@ class Hyperband():
         #     global_scores.append(scores)
         #     global_configs.append(configs)
         #     global_candidates.append(candidates)
-        
-        #print(f'len global_scores[0] {len(global_scores[0])}')
 
+        # print(f'len global_scores[0] {len(global_scores[0])}')
 
-        #for thread in zip(*results):
-
-        
+        # for thread in zip(*results):
 
         # for (scores, configurations, candidates) in results:
         #     all_scores.extend(scores)
         #     all_configurations.extend(configurations)
         #     all_candidates.extend(candidates)
-        
-        
-        #res = processes[0].run()
-        #res1 = processes[1].run()
-        
+
+        # res = processes[0].run()
+        # res1 = processes[1].run()
+
         '''
         for p in processes:
             scores, configurations, candidates = p.run()
@@ -163,7 +160,5 @@ class Hyperband():
             all_configurations.extend(configurations)
             all_candidates.extend(candidates)
             '''
-        #print(f'global history {global_history}')
+        # print(f'global history {global_history}')
         return global_scores, global_configs, global_candidates, global_history, global_misclassifs, global_viols
-
-

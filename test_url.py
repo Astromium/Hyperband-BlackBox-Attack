@@ -81,7 +81,7 @@ if __name__ == '__main__':
     downsample = 3
     sampler = Sampler()
     distance = 2
-    classifier_path = './ressources/model_url.h5'
+    classifier_path = './ressources/baseline_nn.model'
     seed = 202374
     np.random.seed(seed)
     success_rates_l2 = []
@@ -124,7 +124,7 @@ if __name__ == '__main__':
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
 
-        hp = Hyperband(objective=url_evaluator, classifier=model_pipeline, x=x_clean[:BATCH_SIZE], y=y_clean[:BATCH_SIZE], sampler=sampler,
+        hp = Hyperband(objective=url_evaluator, classifier_path=classifier_path, x=x_clean[:BATCH_SIZE], y=y_clean[:BATCH_SIZE], sampler=sampler,
                        eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=downsample, distance=distance, seed=seed)
         profiler = cProfile.Profile()
         profiler.enable()
@@ -137,8 +137,12 @@ if __name__ == '__main__':
 
         end = timeit.default_timer()
         print(f'Exec time {round((end - start) / 60, 3)}')
+        model_nn = TensorflowClassifier(
+            load_model('./ressources/baseline_nn.model'))
+        model_pipeline = Pipeline(
+            steps=[('preprocessing', preprocessing_pipeline), ('model', model_nn)])
         success_rate_calculator = TorchCalculator(
-            classifier=model_pipeline, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates)
+            classifier=model_pipeline, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates, scaler=scaler)
         success_rate, best_candidates, adversarials = success_rate_calculator.evaluate()
         print(
             f'success rate {success_rate}, len best_candidates {len(best_candidates)}, len adversarials {len(adversarials)}')
