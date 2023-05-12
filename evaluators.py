@@ -159,7 +159,7 @@ class TorchEvaluator(Evaluator):
             dist = np.linalg.norm(self.scaler.transform(
                 adv[np.newaxis, :])[0] - x_scaled) - eps
             scores[i] = (self.alpha * pred[y] + self.beta *
-                         violations + dist, np.copy(adv))
+                         violations, np.copy(adv))
             # misclassif[i] = pred[y]
             # viols[i] = violations
             # history[tuple(configuration)].append(score)
