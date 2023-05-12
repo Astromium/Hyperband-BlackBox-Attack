@@ -111,27 +111,30 @@ class TorchEvaluator(Evaluator):
                     adv[c]) if perturbation[i] < 0 else math.floor(adv[c])
         return adv
 
-    def evaluate(self, classifier: Any, configuration: tuple, budget: int, x: NDArray, y: int, eps: float, distance: str, features_min_max: Union[tuple, None], int_features: Union[NDArray, None], generate_perturbation: Callable, history: Dict, candidate: NDArray):
+    def evaluate(self, classifier: Any, configuration: tuple, budget: int, x: List, y: int, eps: float, distance: str, features_min_max: Union[tuple, None], int_features: Union[NDArray, None], generate_perturbation: Callable, history: Dict, candidate: NDArray):
         score = 0.0
         best_score = math.inf
         best_adversarial = None
-        scores = [0] * budget
-        misclassif = [0] * budget
-        viols = [0] * budget
+        # scores = [0] * int(budget)
+        # print(f'len scores {len(scores)}')
+        misclassif = [0] * int(budget)
+        viols = [0] * int(budget)
         if candidate is None:
-            adv = np.copy(x)
+            adv = x.copy()
         else:
-            adv = np.copy(candidate)
-        for i in range(budget):
+            adv = candidate.copy()
+        for i in range(int(budget)):
             # perturbation = generate_perturbation(shape=np.array(configuration).shape, eps=eps, distance=distance)
             perturbation = generate_perturbation(
                 configuration=configuration, features_min=features_min_max[0], features_max=features_min_max[1], x=x)
-            adv[list(configuration)] += perturbation
+            # adv[list(configuration)] += perturbation
+            for i, c in enumerate(configuration):
+                adv[c] += perturbation[i]
 
             # print(f'dist after perturbating {dist}')
 
-            adv_scaled = self.scaler.transform(adv[np.newaxis, :])[0]
-            x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
+            adv_scaled = self.scaler.transform(np.array(adv)[np.newaxis, :])[0]
+            x_scaled = self.scaler.transform(np.array(x)[np.newaxis, :])[0]
             dist = np.linalg.norm(adv_scaled - x_scaled, ord=distance)
             # print(f'dist before projection {dist}')
             if dist > eps:
@@ -156,10 +159,11 @@ class TorchEvaluator(Evaluator):
             pred = classifier.predict_proba(adv[np.newaxis, :])[0]
             violations = self.constraint_executor.execute(adv[np.newaxis, :])[
                 0]
-            dist = np.linalg.norm(self.scaler.transform(
-                adv[np.newaxis, :])[0] - x_scaled) - eps
-            scores[i] = (self.alpha * pred[y] + self.beta *
-                         violations + dist, np.copy(adv))
+
+            score = self.alpha * pred[y] + self.beta * violations
+            if score < best_score:
+                best_adversarial = adv.tolist()
+                best_score = score
             # misclassif[i] = pred[y]
             # viols[i] = violations
             # history[tuple(configuration)].append(score)
@@ -179,12 +183,13 @@ class TorchEvaluator(Evaluator):
             # print(f'dist of best {dist}')
             # if dist > eps:
             # best_adversarial = x + (best_adversarial - x) * eps / dist
-        scores = sorted(scores, key=lambda k: k[0])
-        misclassif = sorted(misclassif)
-        viols = sorted(viols)
+        # scores = sorted(scores, key=lambda k: k[0])
+        # misclassif = sorted(misclassif)
+        # viols = sorted(viols)
         # dist = np.linalg.norm(x - best_adversarial, ord=distance)
         # print(f'dist before returning {dist}')
-        return round(scores[0][0], 3), scores[0][1], misclassif[0], viols[0]
+        # return round(scores[0][0], 3), scores[0][1], misclassif[0], viols[0]
+        return best_score, best_adversarial, misclassif[0], viols[0]
 
 
 class SickitEvaluator(Evaluator):
@@ -199,6 +204,7 @@ class SickitEvaluator(Evaluator):
 
     def evaluate(self, classifier: Any, configuration: tuple, budget: int, x: NDArray, y: int, eps: float, distance: str, features_min_max: Union[tuple, None], generate_perturbation: Callable):
         score = 0.0
+        x = np.array(x)
         adv = np.array(x)
         best_score = math.inf
         best_adversarial = None

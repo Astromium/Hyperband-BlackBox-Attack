@@ -12,9 +12,9 @@ def generate_perturbation(shape: Tuple, eps: float, distance: str):
 '''
 
 
-def generate_perturbation(configuration: List, features_min: List, features_max: List, x: NDArray):
+def generate_perturbation(configuration: List, features_min: List, features_max: List, x: List):
     perturbation = [random.uniform(
-        x[c] - features_max[c], features_max[c] - x[c]) for c in configuration]
+        features_min[c] - x[c], features_max[c] - x[c]) for c in configuration]
     return perturbation
 
 # pb = generate_perturbation(configuration=[0, 2, 4], features_max=(10, 20, 30, 40, 50), x=[1,2,3,4,5])
