@@ -74,7 +74,7 @@ if __name__ == '__main__':
 
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
-    BATCH_SIZE = x_clean.shape[0]
+    BATCH_SIZE = 100#x_clean.shape[0]
     eps = 0.2
     downsample = 3
     sampler = Sampler()
@@ -85,7 +85,7 @@ if __name__ == '__main__':
     success_rates_l2 = []
     exec_times_l2 = []
 
-    R_values = [243]
+    R_values = [81]
     history_dict = dict()
     '''
     for eps in perturbations:
@@ -132,6 +132,7 @@ if __name__ == '__main__':
 
         end = timeit.default_timer()
         print(f'Exec time {round((end - start) / 60, 3)}')
+        print(f'scores {scores}')
         model_tf = TensorflowClassifier(load_model(classifier_path))
         model_pipeline = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', model_tf)])
         success_rate_calculator = TorchCalculator(classifier=model_pipeline, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates, scaler=scaler)

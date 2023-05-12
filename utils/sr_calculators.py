@@ -65,10 +65,10 @@ class TorchCalculator(SuccessRateCalculator):
             correct += 1
             best_score_idx = np.argmin(self.scores[i])  
             best_candidate = self.candidates[i][best_score_idx]
-            #bc_scaled = self.scaler.transform(best_candidate[np.newaxis, :])[0]
-            #x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
-            #dist = np.linalg.norm(bc_scaled - x)
-            #print(f'dist scaled {dist}')
+            bc_scaled = self.scaler.transform(best_candidate[np.newaxis, :])[0]
+            x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
+            dist = np.linalg.norm(bc_scaled - x_scaled)
+            print(f'dist scaled {dist}')
             pred = self.classifier.predict(best_candidate[np.newaxis, :])[0]
             best_candidates.append(best_candidate)
 
