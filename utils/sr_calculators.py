@@ -71,9 +71,10 @@ class TorchCalculator(SuccessRateCalculator):
             candidate_scaled = self.scaler.transform(
                 candidate[np.newaxis, :])[0]
             x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
+            dist = np.linalg.norm(candidate_scaled - x_scaled)
             print(
-                f'dist scaled {np.linalg.norm(candidate_scaled - x_scaled)}')
-            if pred != y and np.linalg.norm(candidate - x_scaled) <= 0.2:
+                f'dist scaled {dist}')
+            if pred != y and dist <= 0.2:
                 print(f'adversarial {i}')
                 success_rate += 1
         eps = 0.0001 if correct == 0 else 0
