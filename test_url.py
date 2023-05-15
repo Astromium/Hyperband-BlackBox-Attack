@@ -1,29 +1,31 @@
+import pstats
+import cProfile
+import warnings
+import pickle
+import joblib
+import timeit
+from tensorflow.keras.models import load_model
+from utils.model import Net
+from ml_wrappers import wrap_model
+from constraints.relation_constraint import AndConstraint
+from constraints.url_constraints import get_url_relation_constraints
+from constraints.constraints_executor import NumpyConstraintsExecutor
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from utils.sr_calculators import TorchCalculator
+from utils.tensorflow_classifier import TensorflowClassifier
+from sampler import Sampler
+from evaluators import TorchEvaluator
+from hyperband import Hyperband
+import pandas as pd
+import numpy as np
+import torch
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-import torch
-import numpy as np
-import pandas as pd
-from hyperband import Hyperband
-from evaluators import TorchEvaluator
-from sampler import Sampler
-from utils.sr_calculators import TorchCalculator
-from sklearn.model_selection import train_test_split
-from constraints.constraints_executor import NumpyConstraintsExecutor
-from constraints.url_constraints import get_url_relation_constraints
-from constraints.relation_constraint import AndConstraint
-from ml_wrappers import wrap_model
-from utils.model import Net
-from utils.tensorflow_classifier import TensorflowClassifier
-from tensorflow.keras.models import load_model
-import timeit
-import joblib
-import pickle
-import warnings
-import cProfile, pstats
-from sklearn.pipeline import Pipeline
 warnings.filterwarnings(action='ignore')
 
-scaler = preprocessing_pipeline = joblib.load('./ressources/baseline_scaler.joblib')
+scaler = preprocessing_pipeline = joblib.load(
+    './ressources/baseline_scaler.joblib')
 
 
 if __name__ == '__main__':
@@ -41,8 +43,8 @@ if __name__ == '__main__':
         test_size=0.2
     )
 
-    #scaler = MinMaxScaler()
-    
+    # scaler = MinMaxScaler()
+
     X = scaler.transform(X)
     X_train, X_test = X[i_train], X[i_test]
     y_train, y_test = y[i_train], y[i_test]
@@ -52,9 +54,8 @@ if __name__ == '__main__':
 
     x_clean = np.load('./ressources/baseline_X_test_candidates.npy')
     y_clean = np.load('./ressources/baseline_y_test_candidates.npy')
-    #x_clean = scaler.transform(x_clean)
+    # x_clean = scaler.transform(x_clean)
 
-    #model_pipeline = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', rf)])
     metadata = pd.read_csv('./ressources/url_metadata.csv')
     min_constraints = metadata['min'].to_list()[:63]
     max_constraints = metadata['max'].to_list()[:63]
@@ -65,12 +66,13 @@ if __name__ == '__main__':
     constraints = get_url_relation_constraints()
     executor = NumpyConstraintsExecutor(AndConstraint(constraints))
 
-    model_tf = TensorflowClassifier(load_model(r'ressources\baseline_nn.model'))
+    model_tf = TensorflowClassifier(
+        load_model(r'ressources\baseline_nn.model'))
     model = Net()
     model = torch.load('./ressources/model_url.pth')
     model = wrap_model(model, x_clean, model_task='classification')
-    rf = joblib.load('./ressources/baseline_rf.model')
-    model_pipeline = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', model)])
+    model_pipeline = Pipeline(
+        steps=[('preprocessing', preprocessing_pipeline), ('model', model)])
 
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
@@ -115,7 +117,7 @@ if __name__ == '__main__':
     args_correct = (preds == y_clean[:BATCH_SIZE]).astype('int')
     x_correct, y_correct = x_clean[args_correct], y_clean[args_correct]
     '''
-        
+
     for R in R_values:
         url_evaluator = TorchEvaluator(constraints=constraints, scaler=scaler, alpha=1.0, beta=1.0)
         scores, configs, candidates = [], [], []
@@ -124,7 +126,8 @@ if __name__ == '__main__':
         hp = Hyperband(objective=url_evaluator, classifier_path=classifier_path, x=x_clean[:BATCH_SIZE], y=y_clean[:BATCH_SIZE], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=downsample, distance=distance, seed=seed)
         profiler = cProfile.Profile()
         profiler.enable()
-        scores, configs, candidates, _, _, _ = hp.generate(mutables=None, features_min_max=(min_constraints,max_constraints), int_features=int_features)
+        scores, configs, candidates, _, _, _ = hp.generate(mutables=None, features_min_max=(
+            min_constraints, max_constraints), int_features=int_features)
         profiler.disable()
         #stats = pstats.Stats(profiler).sort_stats(pstats.SortKey.TIME)
         #stats.print_stats()
@@ -144,16 +147,18 @@ if __name__ == '__main__':
         violations_candidates = np.array([executor.execute(adv[np.newaxis, :])[0] for adv in best_candidates])
         tolerance = 0.0001
         satisfaction = (violations < tolerance).astype('int').sum()
-        satisfaction_candidates = (violations_candidates < tolerance).astype('int').sum()
-        #print(f'Constraints satisfaction (C&M) {(success_rate * 100) - satisfaction}')
-        history_dict[R] = {'M': round(success_rate * 100, 2), 'C&M': round((satisfaction * 100) / BATCH_SIZE, 2), 'C': round((satisfaction_candidates * 100) / len(best_candidates), 2), 'Execution time': round((end - start) / 60, 3)}
-    
+        satisfaction_candidates = (
+            violations_candidates < tolerance).astype('int').sum()
+        # print(f'Constraints satisfaction (C&M) {(success_rate * 100) - satisfaction}')
+        history_dict[R] = {'M': round(success_rate * 100, 2), 'C&M': round((satisfaction * 100) / BATCH_SIZE, 2), 'C': round(
+            (satisfaction_candidates * 100) / len(best_candidates), 2), 'Execution time': round((end - start) / 60, 3)}
+
     print(f'History {history_dict}')
-    
-    
-    #scores = softmax(model.predict(np.array(adversarials)), axis=1)
-    #print(f'scores {scores}')
-    #print(f'Violations for x_clean {[executor.execute(x[np.newaxis, :]) for x in x_clean]}')
-    #dist = np.linalg.norm(adversarials[0][0] - X_test_phishing[0])
-    #print(f'dist {dist}')
-    
+    with open('history.pkl', 'wb') as f:
+        pickle.dump(history_dict, f)
+
+    # scores = softmax(model.predict(np.array(adversarials)), axis=1)
+    # print(f'scores {scores}')
+    # print(f'Violations for x_clean {[executor.execute(x[np.newaxis, :]) for x in x_clean]}')
+    # dist = np.linalg.norm(adversarials[0][0] - X_test_phishing[0])
+    # print(f'dist {dist}')

@@ -18,5 +18,5 @@ def generate_perturbation(configuration: List, features_min: List, features_max:
             #perturbation[i] = round(perturbation[i])
     return perturbation
 
-#pb = generate_perturbation(configuration=[0, 2, 4], features_max=(10, 20, 30, 40, 50), x=[1,2,3,4,5])
-#print(f'pb {pb}')
+# pb = generate_perturbation(configuration=[0, 2, 4], features_max=(10, 20, 30, 40, 50), x=[1,2,3,4,5])
+# print(f'pb {pb}')

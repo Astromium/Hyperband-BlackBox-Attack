@@ -57,7 +57,7 @@ class SuccessiveHalving():
     
     def process_one(self, candidate, idx, configuration, budget, history, history_mis, history_vio):
         new_score, new_candidate, misclassif, viol = self.objective.evaluate(
-           classifier=self.classifier,
+            classifier=self.classifier,
             configuration=configuration,
             budget=budget,
             x=self.x[idx],
@@ -68,36 +68,38 @@ class SuccessiveHalving():
             int_features=self.int_features,
             generate_perturbation=generate_perturbation,
             history=history,
-            candidate=candidate 
+            candidate=candidate
         )
         history[tuple(configuration)].append(new_score)
         history_mis[tuple(configuration)].append(misclassif)
         history_vio[tuple(configuration)].append(viol)
         return new_score, new_candidate
-        #if new_score < score:
-            #return tuple([new_score, new_candidate])
-        #else:
-            #return tuple([score, candidate])
-        
+        # if new_score < score:
+        # return tuple([new_score, new_candidate])
+        # else:
+        # return tuple([score, candidate])
+
     def run_one(self, idx):
 
         configurations = self.sampler.sample(
-                dimensions=self.dimensions,
-                num_configs=self.n_configurations,
-                max_configuration_size=self.max_configuration_size,
-                mutables_mask=self.mutables,
-                seed=self.seed
-            )  
+            dimensions=self.dimensions,
+            num_configs=self.n_configurations,
+            max_configuration_size=self.max_configuration_size,
+            mutables_mask=self.mutables,
+            seed=self.seed
+        )
         history = {}
-        #scores = [math.inf for s in range(len(configurations))]
-        #candidates = [None for c in range(len(configurations))]
+        # scores = [math.inf for s in range(len(configurations))]
+        # candidates = [None for c in range(len(configurations))]
 
         for i in range(self.hyperband_bracket + 1):
             budget = self.bracket_budget * pow(self.downsample, i)
-            results = [self.process_one(score=score, candidate=candidate, idx=idx, configuration=configuration, budget=budget, history=history) for score, candidate, configuration in zip(scores, candidates, configurations)]
+            results = [self.process_one(score=score, candidate=candidate, idx=idx, configuration=configuration, budget=budget,
+                                        history=history) for score, candidate, configuration in zip(scores, candidates, configurations)]
             scores = [r[0] for r in results]
             candidates = [r[1] for r in results]
-            top_indices = np.argsort(scores)[:max(int(len(scores) / self.downsample), 1)]
+            top_indices = np.argsort(scores)[:max(
+                int(len(scores) / self.downsample), 1)]
             configurations = [configurations[j] for j in top_indices]
             candidates = [candidates[j] for j in top_indices]
             '''
@@ -114,24 +116,18 @@ class SuccessiveHalving():
 
         return (scores, configurations, candidates, history)
 
-
-
-        
-    
     def run(self):
-        if(self.downsample <= 1):
-            raise(ValueError('Downsample must be > 1'))
-        
-        
-        round_n = lambda n : max(int(n), 1)
-        #all_results = [self.run_one(idx=i) for i in range(self.x.shape[0])]
-        #return all_results
+        if (self.downsample <= 1):
+            raise (ValueError('Downsample must be > 1'))
 
-        
-        all_results = [] 
+        def round_n(n): return max(int(n), 1)
+        # all_results = [self.run_one(idx=i) for i in range(self.x.shape[0])]
+        # return all_results
+
+        all_results = []
 
         for idx in range(self.x.shape[0]):
-        
+
             configurations = self.sampler.sample(
                 dimensions=self.dimensions,
                 num_configs=self.n_configurations,
@@ -142,22 +138,26 @@ class SuccessiveHalving():
             history = {tuple(c): [] for c in configurations}
             history_mis = {tuple(c): [1.0] for c in configurations}
             history_vio = {tuple(c): [] for c in configurations}
-            #history = {}
+            # history = {}
 
-            #scores = [math.inf for s in range(len(configurations))]
-            #candidates = [None for c in range(len(configurations))]
+            # scores = [math.inf for s in range(len(configurations))]
+            # candidates = [None for c in range(len(configurations))]
 
             for i in range(self.hyperband_bracket + 1):
-                budget = self.bracket_budget * pow(self.downsample, i) if self.bracket_budget * pow(self.downsample, i) < self.R else self.R
-                results = [self.process_one(candidate=None, idx=idx, configuration=configuration, budget=budget, history=history, history_mis=history_mis, history_vio=history_vio) for configuration in tqdm(configurations, total=len(configurations), desc=f'SH round {i}, Evaluating {len(configurations)} with budget of {budget}')]
-                
+                budget = self.bracket_budget * \
+                    pow(self.downsample, i) if self.bracket_budget * \
+                    pow(self.downsample, i) < self.R else self.R
+                results = [self.process_one(candidate=None, idx=idx, configuration=configuration, budget=budget, history=history, history_mis=history_mis, history_vio=history_vio)
+                           for configuration in tqdm(configurations, total=len(configurations), desc=f'SH round {i}, Evaluating {len(configurations)} with budget of {budget}')]
+
                 scores = [r[0] for r in results]
                 candidates = [r[1] for r in results]
-                top_indices = np.argsort(scores)[:max(int(len(scores) / self.downsample), 1)]
+                top_indices = np.argsort(scores)[:max(
+                    int(len(scores) / self.downsample), 1)]
                 configurations = [configurations[j] for j in top_indices]
                 candidates = [candidates[j] for j in top_indices]
                 scores = [scores[j] for j in top_indices]
-                
+
                 '''
                 for score, candidate, configuration in tqdm(zip(scores, candidates, configurations), total=len(configurations), desc=f'Running Round {i} of SH. Evaluating {len(configurations)} configurations with budget of {budget}'):
                     new_score, new_candidate = self.objective.evaluate(
@@ -190,13 +190,9 @@ class SuccessiveHalving():
             scores, candidates = zip(*results)
             scores, candidates = list(scores), list(candidates)
             '''
-            
-                #print(f'scores of round {i} {scores}')
-            #print(f'len scores {len(scores)}, len configs {len(configurations)}, len candidates {len(candidates)}')
-            all_results.append((scores, configurations, candidates, history, history_mis, history_vio))
+
+                # print(f'scores of round {i} {scores}')
+            # print(f'len scores {len(scores)}, len configs {len(configurations)}, len candidates {len(candidates)}')
+            all_results.append(
+                (scores, configurations, candidates, history, history_mis, history_vio))
         return all_results
-        
-        
-
-
-    
