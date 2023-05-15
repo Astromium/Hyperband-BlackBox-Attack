@@ -97,7 +97,12 @@ class TorchEvaluator(Evaluator):
         scores = sorted(scores, key=lambda k: k[0])
         return round(scores[0][0], 3), scores[0][1], 0, 0
 
-        
+    def fix_feature_types(self, perturbation, adv, int_features, configuration):
+        for i, c in enumerate(configuration):
+            if c in int_features:
+                adv[c] = math.ceil(
+                    adv[c]) if perturbation[i] < 0 else math.floor(adv[c])
+        return adv   
         
     
     def evaluate(self, classifier: Any, configuration: tuple, budget: int, x: NDArray, y: int, eps: float, distance: str, features_min_max: Union[tuple, None], int_features: Union[NDArray, None], generate_perturbation: Callable, history: Dict, candidate: NDArray):
@@ -119,27 +124,21 @@ class TorchEvaluator(Evaluator):
             adv_scaled = self.scaler.transform(adv[np.newaxis, :])[0]
             x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
             dist = np.linalg.norm(adv_scaled - x_scaled, ord=distance)
-            #print(f'dist before projection {dist}')
             if dist > eps:
                 adv_scaled = x_scaled + (adv_scaled - x_scaled) * eps / dist
                 # transform back to pb space    
                 adv = self.scaler.inverse_transform(adv_scaled[np.newaxis, :])[0]
-            #print(f'dist scaled before clipping {np.linalg.norm(self.scaler.transform(adv[np.newaxis, :])[0] - x_scaled)}')
+           
             # clipping
             adv = np.clip(adv, features_min_max[0], features_min_max[1])
-            #print(f'dist scaled after clipping {np.linalg.norm(self.scaler.transform(adv[np.newaxis, :])[0] - x_scaled)}')
             # casting
-            #adv[int_features] = adv[int_features].astype('int')
-            #print(f'dist scaled after casting {np.linalg.norm(self.scaler.transform(adv[np.newaxis, :])[0] - x_scaled)}')
-            #dist = np.linalg.norm(adv - x, ord=distance)
+            adv = self.fix_feature_types(
+                perturbation=perturbation, adv=adv, int_features=int_features, configuration=configuration)
+            
             pred = classifier.predict_proba(adv[np.newaxis, :])[0]
             violations = self.constraint_executor.execute(adv[np.newaxis, :])[0]
-            #print(f'dist scaled before returning {np.linalg.norm(self.scaler.transform(adv[np.newaxis, :])[0] - x_scaled)}')
             scores[i] = (self.alpha * pred[y] + self.beta * violations, np.copy(adv)) 
-            #misclassif[i] = pred[y]
-            #viols[i] = violations
-            #history[tuple(configuration)].append(score)
-            #score = self.alpha + self.beta * violations
+           
             '''
             if score < best_score:
                 print('New score')
