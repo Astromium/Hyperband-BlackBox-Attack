@@ -8,6 +8,7 @@ from constraints.constraints_executor import NumpyConstraintsExecutor
 from constraints.relation_constraint import AndConstraint
 from sklearn.preprocessing import MinMaxScaler
 from utils.mutation_generator import generate_mutations
+from pymoo.util.nds import fast_non_dominated_sort
 import numpy as np
 import math
 
@@ -112,6 +113,7 @@ class TorchEvaluator(Evaluator):
         scores = [0] * budget
         misclassif = [0] * budget
         viols = [0] * budget
+        candidates = [None] * budget
         if candidate is None:
             adv = np.copy(x)
         else:
@@ -137,7 +139,8 @@ class TorchEvaluator(Evaluator):
             
             pred = classifier.predict_proba(adv[np.newaxis, :])[0]
             violations = self.constraint_executor.execute(adv[np.newaxis, :])[0]
-            scores[i] = (self.alpha * pred[y] + self.beta * violations, np.copy(adv)) 
+            scores[i] = [self.alpha * pred[y] + self.beta * violations]
+            candidates[i] = np.copy(adv) 
            
             '''
             if score < best_score:
@@ -154,12 +157,10 @@ class TorchEvaluator(Evaluator):
             #print(f'dist of best {dist}')
             #if dist > eps:
                 #best_adversarial = x + (best_adversarial - x) * eps / dist
-        scores = sorted(scores, key=lambda k: k[0])
-        misclassif = sorted(misclassif)
-        viols = sorted(viols)
+        fronts = fast_non_dominated_sort.fast_non_dominated_sort(np.array(scores))
         #dist = np.linalg.norm(x - best_adversarial, ord=distance)
         #print(f'dist before returning {dist}')
-        return round(scores[0][0], 3), scores[0][1], misclassif[0], viols[0]
+        return candidates[fronts[0][0]]
     
 class SickitEvaluator(Evaluator):
     def __init__(self, constraints: Union[List[BaseRelationConstraint], None], scaler: Union[MinMaxScaler, None], alpha: float, beta: float):
