@@ -140,9 +140,9 @@ history_dict = dict()
 host = 'localhost'
 shared_directory = '.'
 run_id = '0'
-min_budget = 1
+min_budget = 3
 max_budget = 81
-n_iterations = 5
+n_iterations = 3
 
 
 dehb = DEHB(
@@ -154,15 +154,16 @@ dehb = DEHB(
     n_workers=1,
     output_path="./temp"
 )
-
+import timeit
 alpha=1.0
 beta=1.0
 candidates = []
+start = timeit.default_timer()
 for i in range(BATCH_SIZE):
     dehb.reset()
     trajectory, runtime, history = dehb.run(
         #total_cost=10,
-        brackets=2,
+        brackets=3,
         verbose=False,
         save_intermediate=False,
         # parameters expected as **kwargs in target_function is passed here
@@ -195,7 +196,8 @@ for i in range(BATCH_SIZE):
     print("The additional info attached: {}".format(_info))
     '''
     candidates.append(_info['adv'])
-
+end = timeit.default_timer()
+print(f'It took {(end - start) / 60}')
 candidates = np.array(candidates)
 preds = model_pipeline.predict(candidates)
 sr = (preds != 1).astype('int').sum() / BATCH_SIZE
