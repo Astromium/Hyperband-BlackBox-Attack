@@ -22,11 +22,11 @@ class Evaluator(ABC):
     @abstractmethod
     def evaluate(self, classifier: Any, configuration: tuple, budget: int, x: NDArray, y: int, eps: float, distance: str, features_min_max: Union[tuple, None]):
         pass
-
+    '''
     @abstractmethod
     def evaluate2(self, classifier: Any, configuration: tuple, budget: int, x: NDArray, y: int, eps: float, distance: str, features_min_max: Union[tuple, None]):
         pass
-
+    '''
 
 class TfEvaluator(Evaluator):
     def __init__(self, constraints: Union[List[BaseRelationConstraint], None], scaler: Union[MinMaxScaler, None], alpha: float, beta: float):
@@ -132,7 +132,7 @@ class TorchEvaluator(Evaluator):
             adv = np.copy(candidate)
         for i in range(budget):
             #perturbation = generate_perturbation(shape=np.array(configuration).shape, eps=eps, distance=distance)
-            perturbation = generate_perturbation(configuration=configuration, features_min=features_min_max[0], features_max=features_min_max[1], x=x)
+            perturbation = generate_perturbation(configuration=configuration, features_min=features_min_max[0], features_max=features_min_max[1], x=x, int_features=int_features)
             adv[list(configuration)] += perturbation
             dist = np.linalg.norm(adv - x, ord=distance)
             #print(f'dist after perturbating {dist}')
