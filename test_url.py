@@ -68,6 +68,7 @@ if __name__ == '__main__':
 
     model_tf = TensorflowClassifier(
         load_model(r'ressources\baseline_nn.model'))
+    model_rf = joblib.load('./ressources/baseline_rf.model')
     model = Net()
     model = torch.load('./ressources/model_url.pth')
     model = wrap_model(model, x_clean, model_task='classification')
@@ -76,7 +77,7 @@ if __name__ == '__main__':
 
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
-    BATCH_SIZE = 10  # x_clean.shape[0]
+    BATCH_SIZE = x_clean.shape[0]
     eps = 0.2
     downsample = 3
     sampler = Sampler()
@@ -142,7 +143,7 @@ if __name__ == '__main__':
         model_pipeline = Pipeline(
             steps=[('preprocessing', preprocessing_pipeline), ('model', model_nn)])
         success_rate_calculator = TorchCalculator(
-            classifier=model_pipeline, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates, scaler=scaler)
+            classifier=model_pipeline, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates, configs=configs, scaler=scaler)
         success_rate, best_candidates, adversarials = success_rate_calculator.evaluate()
         print(
             f'success rate {success_rate}, len best_candidates {len(best_candidates)}, len adversarials {len(adversarials)}')

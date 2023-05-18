@@ -112,9 +112,31 @@ class TorchEvaluator(Evaluator):
         return adv
 
     def evaluate(self, classifier: Any, configuration: tuple, budget: int, x: NDArray, y: int, eps: float, distance: str, features_min_max: Union[tuple, None], int_features: Union[NDArray, None], generate_perturbation: Callable, history: Dict, candidate: NDArray):
-        score = 0.0
-        best_score = math.inf
-        best_adversarial = None
+        '''
+        perturbations = [generate_perturbation(
+            configuration=configuration, features_min=features_min_max[0], features_max=features_min_max[1], x=x) for _ in range(budget)]
+        scores, misclassif, viols = [0] * budget, [0] * budget, [0] * budget
+        for i, p in enumerate(perturbations):
+            adv = np.copy(x)
+            adv[list(configuration)] += p
+            adv_scaled = self.scaler.transform(adv[np.newaxis, :])[0]
+            x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
+            dist = np.linalg.norm(adv_scaled - x_scaled, ord=distance)
+            # print(f'dist before projection {dist}')
+            if dist > eps:
+                adv_scaled = x_scaled + (adv_scaled - x_scaled) * eps / dist
+                # transform back to pb space
+                adv = self.scaler.inverse_transform(
+                    adv_scaled[np.newaxis, :])[0]
+            adv = np.clip(adv, features_min_max[0], features_min_max[1])
+            adv = self.fix_feature_types(
+                perturbation=p, adv=adv, int_features=int_features, configuration=configuration)
+            pred = classifier.predict_proba(adv[np.newaxis, :])[0]
+            violations = self.constraint_executor.execute(adv[np.newaxis, :])[
+                0]
+            scores[i] = (self.alpha * pred[y], np.copy(adv))
+        '''
+
         scores = [0] * budget
         misclassif = [0] * budget
         viols = [0] * budget
@@ -146,13 +168,6 @@ class TorchEvaluator(Evaluator):
             adv = self.fix_feature_types(
                 perturbation=perturbation, adv=adv, int_features=int_features, configuration=configuration)
 
-            # casting
-            # adv[int_features] = adv[int_features].astype('int')
-            # print(f'perturbation {perturbation}')
-
-            # dist = np.linalg.norm(self.scaler.transform(
-            # adv[np.newaxis, :]) - x_scaled, ord=distance)
-            # print(f'dist at the end {dist}')
             pred = classifier.predict_proba(adv[np.newaxis, :])[0]
             violations = self.constraint_executor.execute(adv[np.newaxis, :])[
                 0]
@@ -160,30 +175,8 @@ class TorchEvaluator(Evaluator):
                 adv[np.newaxis, :])[0] - x_scaled) - eps
             scores[i] = (self.alpha * pred[y] + self.beta *
                          violations, np.copy(adv))
-            # misclassif[i] = pred[y]
-            # viols[i] = violations
-            # history[tuple(configuration)].append(score)
-            # score = self.alpha + self.beta * violations
-            '''
-            if score < best_score:
-                print('New score')
-                dist1 = np.linalg.norm(x - adv)
-                print(f'dist of adv {dist1}')
-                best_score = score
-                best_adversarial = np.copy(adv)
-                dist1 = np.linalg.norm(x - best_adversarial)
-                print(f'dist after assignement {dist1}')
-            '''
 
-            # dist = np.linalg.norm(best_adversarial - x, ord=distance)
-            # print(f'dist of best {dist}')
-            # if dist > eps:
-            # best_adversarial = x + (best_adversarial - x) * eps / dist
         scores = sorted(scores, key=lambda k: k[0])
-        misclassif = sorted(misclassif)
-        viols = sorted(viols)
-        # dist = np.linalg.norm(x - best_adversarial, ord=distance)
-        # print(f'dist before returning {dist}')
         return round(scores[0][0], 3), scores[0][1], misclassif[0], viols[0]
 
 

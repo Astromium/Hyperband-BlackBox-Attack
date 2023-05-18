@@ -59,6 +59,8 @@ class SuccessiveHalving():
 
         self.classifier = Pipeline(
             steps=[('preprocessing', preprocessing_pipeline), ('model', TensorflowClassifier(load_model(self.classifier_path)))])
+        # self.classifier = Pipeline(
+        #     steps=[('preprocessing', preprocessing_pipeline), ('model', joblib.load(self.classifier_path))])
 
     def process_one(self, candidate, idx, configuration, budget, history, history_mis, history_vio):
         new_score, new_candidate, misclassif, viol = self.objective.evaluate(
@@ -146,14 +148,14 @@ class SuccessiveHalving():
             # history = {}
 
             # scores = [math.inf for s in range(len(configurations))]
-            # candidates = [None for c in range(len(configurations))]
+            candidates = [None for c in range(len(configurations))]
 
             for i in range(self.hyperband_bracket + 1):
                 budget = self.bracket_budget * \
                     pow(self.downsample, i) if self.bracket_budget * \
                     pow(self.downsample, i) < self.R else self.R
-                results = [self.process_one(candidate=None, idx=idx, configuration=configuration, budget=budget, history=history, history_mis=history_mis, history_vio=history_vio)
-                           for configuration in tqdm(configurations, total=len(configurations), desc=f'SH round {i}, Evaluating {len(configurations)} with budget of {budget}')]
+                results = [self.process_one(candidate=candidate, idx=idx, configuration=configuration, budget=budget, history=history, history_mis=history_mis, history_vio=history_vio)
+                           for configuration, candidate in tqdm(zip(configurations, candidates), total=len(configurations), desc=f'SH round {i}, Evaluating {len(configurations)} with budget of {budget}')]
 
                 scores = [r[0] for r in results]
                 candidates = [r[1] for r in results]
