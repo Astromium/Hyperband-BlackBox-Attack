@@ -11,6 +11,7 @@ def generate_perturbation(shape: Tuple, eps: float, distance: str):
     return perturbation
 '''
 def generate_perturbation(configuration: List, features_min: List, features_max: List, x: NDArray):
+    #random.seed(202374)
     perturbation = [random.uniform(features_min[c] - x[c], features_max[c] - x[c]) for c in configuration]
     #perturbation = [random.uniform(x[c], features_max[c]) for c in configuration]
     return perturbation
