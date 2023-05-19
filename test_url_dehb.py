@@ -24,7 +24,7 @@ from utils.perturbation_generator import generate_perturbation
 import joblib
 
 
-seed = 202374
+seed = 42
 np.random.seed(seed)
 warnings.filterwarnings('ignore')
 history = {}
@@ -34,7 +34,7 @@ min_budget, max_budget = 2, 81
 import ConfigSpace as CS
 
 
-def create_search_space(seed=202374):
+def create_search_space(seed=42):
     """Parameter space to be optimized --- contains the hyperparameters
     """
     cs = CS.ConfigurationSpace()
@@ -122,7 +122,7 @@ model_pipeline = Pipeline(
         steps=[('preprocessing', preprocessing_pipeline), ('model', model_tf)])
 
 dimensions = x_clean.shape[1]
-BATCH_SIZE = x_clean.shape[0]
+BATCH_SIZE = 100#x_clean.shape[0]
 eps = 0.2
 downsample = 3
 sampler = Sampler()
@@ -140,10 +140,12 @@ history_dict = dict()
 host = 'localhost'
 shared_directory = '.'
 run_id = '0'
-min_budget = 3
-max_budget = 81
+min_budget = 1
+max_budget = 128
 n_iterations = 3
+eta = 2
 
+import os
 
 dehb = DEHB(
     f=target_function, 
@@ -152,11 +154,13 @@ dehb = DEHB(
     min_budget=min_budget, 
     max_budget=max_budget,
     n_workers=1,
-    output_path="./temp"
+    output_path="./temp",
+    eta=eta
 )
 import timeit
 alpha=1.0
 beta=1.0
+
 candidates = []
 start = timeit.default_timer()
 for i in range(BATCH_SIZE):
