@@ -77,7 +77,7 @@ if __name__ == '__main__':
 
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
-    BATCH_SIZE = x_clean.shape[0]
+    BATCH_SIZE = 1  # x_clean.shape[0]
     eps = 0.2
     downsample = 3
     sampler = Sampler()
@@ -138,20 +138,16 @@ if __name__ == '__main__':
 
         end = timeit.default_timer()
         print(f'Exec time {round((end - start) / 60, 3)}')
-        model_nn = TensorflowClassifier(
-            load_model('./ressources/baseline_nn.model'))
+        model_tf = TensorflowClassifier(load_model(classifier_path))
         model_pipeline = Pipeline(
-            steps=[('preprocessing', preprocessing_pipeline), ('model', model_nn)])
-        success_rate_calculator = TorchCalculator(
-            classifier=model_pipeline, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates, configs=configs, scaler=scaler)
+            steps=[('preprocessing', preprocessing_pipeline), ('model', model_tf)])
+        success_rate_calculator = TorchCalculator(classifier=model_pipeline, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(
+            scores), candidates=candidates, scaler=scaler)
         success_rate, best_candidates, adversarials = success_rate_calculator.evaluate()
         print(
             f'success rate {success_rate}, len best_candidates {len(best_candidates)}, len adversarials {len(adversarials)}')
-        adversarials, best_candidates = scaler.inverse_transform(
-            np.array(adversarials)), scaler.inverse_transform(np.array(best_candidates))
-        # print(f'\n Execution Time {round((end - start) / 60, 3)}\n')
-        # print(f'Success rate over {BATCH_SIZE} examples (M) : {success_rate * 100}')
-        # print(f'len adversarials {len(adversarials)}')
+        # adversarials, best_candidates = scaler.inverse_transform(np.array(adversarials)), scaler.inverse_transform(np.array(best_candidates))
+
         violations = np.array(
             [executor.execute(adv[np.newaxis, :])[0] for adv in adversarials])
         violations_candidates = np.array(

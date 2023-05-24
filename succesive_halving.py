@@ -12,6 +12,7 @@ from utils.tensorflow_classifier import TensorflowClassifier
 from tensorflow.keras.models import load_model
 from sklearn.pipeline import Pipeline
 import joblib
+preprocessing_pipeline = joblib.load('./ressources/baseline_scaler.joblib')
 
 
 class SuccessiveHalving():
@@ -35,7 +36,6 @@ class SuccessiveHalving():
                  hyperband_bracket: int,
                  R: int):
         self.objective = objective
-        self.classifier_path = classifier_path
         self.sampler = sampler
         self.x = x
         self.y = y
@@ -53,14 +53,9 @@ class SuccessiveHalving():
         self.seed = seed
         self.hyperband_bracket = hyperband_bracket
         self.R = R
-
-        preprocessing_pipeline = joblib.load(
-            './ressources/baseline_scaler.joblib')
-
-        self.classifier = Pipeline(
-            steps=[('preprocessing', preprocessing_pipeline), ('model', TensorflowClassifier(load_model(self.classifier_path)))])
-        # self.classifier = Pipeline(
-        #     steps=[('preprocessing', preprocessing_pipeline), ('model', joblib.load(self.classifier_path))])
+        self.classifier_path = classifier_path
+        self.classifier = Pipeline(steps=[('preprocessing', preprocessing_pipeline), (
+            'model', TensorflowClassifier(load_model(self.classifier_path)))])
 
     def process_one(self, candidate, idx, configuration, budget, history, history_mis, history_vio):
         new_score, new_candidate, misclassif, viol = self.objective.evaluate(
@@ -142,7 +137,7 @@ class SuccessiveHalving():
                 mutables_mask=self.mutables,
                 seed=self.seed
             )
-            history = {tuple(c): [1.2] for c in configurations}
+            history = {tuple(c): [] for c in configurations}
             history_mis = {tuple(c): [1.0] for c in configurations}
             history_vio = {tuple(c): [] for c in configurations}
             # history = {}
