@@ -13,6 +13,14 @@ NB_OBJECTIVES = 3
 def get_nb_objectives():
     return NB_OBJECTIVES
 
+def get_bounds(configuration, features_min, features_max, x):
+    xl, xu = [], []
+    for c in configuration:
+        xl.append(features_min[c] - x[c])
+        xu.append(features_max[c] - x[c])
+    return xl, xu
+
+
 
 class AdversarialProblem(ElementwiseProblem):
     def __init__(
@@ -27,7 +35,7 @@ class AdversarialProblem(ElementwiseProblem):
         configuration: List,
         int_features: np.ndarray,
 
-        norm=None,
+        norm=2,
     ):
         # Parameters
         self.x_clean = x_clean
@@ -42,8 +50,12 @@ class AdversarialProblem(ElementwiseProblem):
         self.norm = norm
 
         # Computed attributes
-        xl, xu = min(self.features_min_max[0]), max(self.features_min_max[1])
-
+        #xl, xu = min(self.features_min_max[0]), 100#max(self.features_min_max[1])
+        #print(f'xl, xu {xl}, {xu}')
+        xl, xu = get_bounds(configuration=configuration, features_min=self.features_min_max[0], features_max=self.features_min_max[1], x=self.x_clean)
+        #print(f'xl == xu {np.array((xl == xu)).astype("int").sum()}')
+        #print(f'xu {xu}')
+        #xl, xu = 0.1, 0.9
         super().__init__(
             n_var=self.n_var,
             n_obj=get_nb_objectives(),
@@ -57,11 +69,11 @@ class AdversarialProblem(ElementwiseProblem):
 
     def _obj_misclassify(self, x: np.ndarray) -> np.ndarray:
         y_pred = self.classifier.predict_proba(x)[0][self.y_clean]
-        print(f'y_pred {y_pred}')
         return y_pred
 
     def _obj_distance(self, x_1: np.ndarray, x_2: np.ndarray) -> np.ndarray:
-        return np.linalg.norm(x_1 - x_2, ord=self.norm)
+        dist = np.linalg.norm(x_1 - x_2, ord=self.norm)
+        return dist
 
     def _calculate_constraints(self, x):
         executor = NumpyConstraintsExecutor(
@@ -70,6 +82,9 @@ class AdversarialProblem(ElementwiseProblem):
         return executor.execute(x[np.newaxis, :])[0]
     
     def fix_feature_types(self, adv, x):
+        #print(f'adv before {adv}')
+        adv = np.nan_to_num(x=adv, copy=True)
+        #print(f'adv after {adv}')
         for i, c in enumerate(self.configuration):
             if c in self.int_features:
                 adv[c] = math.ceil(
@@ -77,25 +92,42 @@ class AdversarialProblem(ElementwiseProblem):
         return adv  
 
     def _evaluate(self, x, out, *args, **kwargs):
-
+       
         # print("Evaluate")
 
         # Sanity check
+        '''
         if (x - self.xl < 0).sum() > 0:
             print("Lower than lower bound.")
 
         if (x - self.xu > 0).sum() > 0:
             print("Lower than lower bound.")
-
+        '''
         # --- Prepare necessary representation of the samples
 
         # Retrieve original representation
         x_adv = np.copy(self.x_clean)
+        x = np.nan_to_num(x=x, copy=True)
         x_adv[list(self.configuration)] += x
+
+        adv_scaled = self.scaler.transform(x_adv[np.newaxis, :])[0]
+        x_scaled = self.scaler.transform(self.x_clean[np.newaxis, :])[0]
+        dist = np.linalg.norm(adv_scaled - x_scaled)
+        #print(f'dist after perturbating {dist}')
+        if self._obj_distance(x_1=adv_scaled, x_2=x_scaled) > 0.2:
+            adv_scaled = x_scaled + (adv_scaled - x_scaled) * 0.2 / self._obj_distance(x_1=adv_scaled, x_2=x_scaled)
+            dist = np.linalg.norm(adv_scaled - x_scaled)
+            #print(f'dist after projection {dist}')
+                # transform back to pb space    
+            adv = self.scaler.inverse_transform(adv_scaled[np.newaxis, :])[0]
 
 
         x_adv = np.clip(x_adv, self.features_min_max[0], self.features_min_max[1])
         x_adv = self.fix_feature_types(x_adv, x)
+        adv_scaled = self.scaler.transform(x_adv[np.newaxis, :])[0]
+        x_scaled = self.scaler.transform(self.x_clean[np.newaxis, :])[0]
+        dist = np.linalg.norm(adv_scaled - x_scaled)
+        #print(f'dist after casting {dist}')
 
         obj_misclassify = self._obj_misclassify(x_adv[np.newaxis, :])
         obj_distance = self._obj_distance(
