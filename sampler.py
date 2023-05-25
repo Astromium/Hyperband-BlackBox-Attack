@@ -7,7 +7,7 @@ from typing import List, Union
 class Sampler():
 
     def sample(self, dimensions: int, num_configs: int, max_configuration_size: int, mutables_mask: Union[List[int], None], seed: int) -> List[int]:
-        random.seed(seed)
+        #random.seed(seed)
         configurations = [None] * num_configs
         if mutables_mask:
             sample_list = mutables_mask

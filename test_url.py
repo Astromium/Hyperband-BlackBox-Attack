@@ -54,6 +54,7 @@ if __name__ == '__main__':
 
     x_clean = np.load('./ressources/baseline_X_test_candidates.npy')
     y_clean = np.load('./ressources/baseline_y_test_candidates.npy')
+    print(f'y_clean {y_clean}')
     # x_clean = scaler.transform(x_clean)
 
     metadata = pd.read_csv('./ressources/url_metadata.csv')
@@ -77,7 +78,7 @@ if __name__ == '__main__':
 
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
-    BATCH_SIZE = 1  # x_clean.shape[0]
+    BATCH_SIZE = 100  # x_clean.shape[0]
     eps = 0.2
     downsample = 3
     sampler = Sampler()
@@ -138,6 +139,7 @@ if __name__ == '__main__':
 
         end = timeit.default_timer()
         print(f'Exec time {round((end - start) / 60, 3)}')
+        # print(f'scores {scores}')
         model_tf = TensorflowClassifier(load_model(classifier_path))
         model_pipeline = Pipeline(
             steps=[('preprocessing', preprocessing_pipeline), ('model', model_tf)])
@@ -159,10 +161,6 @@ if __name__ == '__main__':
         # print(f'Constraints satisfaction (C&M) {(success_rate * 100) - satisfaction}')
         history_dict[R] = {'M': round(success_rate * 100, 2), 'C&M': round((satisfaction * 100) / BATCH_SIZE, 2), 'C': round(
             (satisfaction_candidates * 100) / len(best_candidates), 2), 'Execution time': round((end - start) / 60, 3)}
-
-    print(f'History {history_dict}')
-    with open('history.pkl', 'wb') as f:
-        pickle.dump(history_dict, f)
 
     # scores = softmax(model.predict(np.array(adversarials)), axis=1)
     # print(f'scores {scores}')

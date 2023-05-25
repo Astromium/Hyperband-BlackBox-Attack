@@ -10,8 +10,9 @@ from sklearn.preprocessing import MinMaxScaler
 from utils.mutation_generator import generate_mutations
 from adversarial_problem import AdversarialProblem
 from pymoo.algorithms.moo.rnsga3 import RNSGA3
-from pymoo.factory import get_crossover, get_mutation, get_problem, get_reference_directions, get_termination
+from pymoo.factory import get_crossover, get_mutation, get_problem, get_reference_directions, get_termination, get_sampling
 from pymoo.optimize import minimize
+from pymoo.util.nds import fast_non_dominated_sort
 import numpy as np
 import math
 
@@ -116,6 +117,10 @@ class TorchEvaluator(Evaluator):
         return adv
 
     def evaluate(self, classifier: Any, configuration: tuple, budget: int, x: NDArray, y: int, eps: float, distance: str, features_min_max: Union[tuple, None], int_features: Union[NDArray, None], generate_perturbation: Callable, history: Dict, candidate: NDArray):
+        '''
+        scores = []
+        misclassifs = [0] * budget
+        viols = [0] * budget
         perturbations = [
             generate_perturbation(configuration=configuration,
                                   features_min=features_min_max[0],
@@ -127,8 +132,10 @@ class TorchEvaluator(Evaluator):
                                      features_min_max=features_min_max, scaler=self.scaler, configuration=configuration, int_features=int_features, norm=2)
 
         ref_points = get_reference_directions(
-            "energy", problem.n_obj, 100, seed=1
-        )
+                "energy", problem.n_obj, 100, seed=1
+            )
+
+        # get_sampling('real_random')
 
         algorithm = RNSGA3(  # population size
             n_offsprings=100,  # number of offsprings
@@ -145,22 +152,23 @@ class TorchEvaluator(Evaluator):
         optimal_solutions = res.pop.get("X")
         optimal_objectives = res.pop.get("F")
 
-        for i in range(len(optimal_solutions)):
-            # print("Solution:", optimal_solutions[i])
-            adv = np.copy(x)
-            adv[list(configuration)] += optimal_solutions[i]
-            adv = np.clip(adv, features_min_max[0], features_min_max[1])
-            adv = self.fix_feature_types(
-                optimal_solutions[i], adv, int_features, configuration)
-            pred = classifier.predict(adv[np.newaxis, :])[0]
-            print(f"Objective values {i}: {optimal_objectives[i]}")
-            print(f'pred of the optimal solution {i} : {pred}')
-            adv_sc = self.scaler.transform(adv[np.newaxis, :])
-            x_sc = self.scaler.transform(x[np.newaxis, :])
-            dist = np.linalg.norm(adv_sc - x_sc)
-            print(f'dist of the optimal solution {i} : {dist}')
 
+        for i in range(len(optimal_solutions)):
+            #print("Solution:", optimal_solutions[i])
+
+            adv = np.copy(x)
+            adv[list(configuration)] += np.nan_to_num(optimal_solutions[i])
+            adv = np.clip(adv, features_min_max[0], features_min_max[1])
+            adv = self.fix_feature_types(optimal_solutions[i], adv, int_features, configuration)
+            pred = classifier.predict_proba(adv[np.newaxis, :])[0]
+            print(f'pred of the optimal solution {i} : {pred}')
+
+            print(f"Objective values {i}: {optimal_objectives[i]}")
+            scores.append((sum(optimal_objectives[i]), optimal_solutions[i]))
+
+        return round(scores[0][0], 3), scores[0][1], misclassifs[0], viols[0]
         '''
+
         score = 0.0
         best_score = math.inf
         best_adversarial = None
@@ -176,26 +184,29 @@ class TorchEvaluator(Evaluator):
             perturbation = generate_perturbation(
                 configuration=configuration, features_min=features_min_max[0], features_max=features_min_max[1], x=x)
             adv[list(configuration)] += perturbation
-            
+
             adv_scaled = self.scaler.transform(adv[np.newaxis, :])[0]
             x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
             dist = np.linalg.norm(adv_scaled - x_scaled, ord=distance)
             if dist > eps:
                 adv_scaled = x_scaled + (adv_scaled - x_scaled) * eps / dist
-                # transform back to pb space    
-                adv = self.scaler.inverse_transform(adv_scaled[np.newaxis, :])[0]
-           
+                # transform back to pb space
+                adv = self.scaler.inverse_transform(
+                    adv_scaled[np.newaxis, :])[0]
+
             # clipping
             adv = np.clip(adv, features_min_max[0], features_min_max[1])
             # casting
             adv = self.fix_feature_types(
                 perturbation=perturbation, adv=adv, int_features=int_features, configuration=configuration)
-            
+
             pred = classifier.predict_proba(adv[np.newaxis, :])[0]
-            violations = self.constraint_executor.execute(adv[np.newaxis, :])[0]
-            scores[i] = (self.alpha * pred[y] + self.beta * violations, np.copy(adv)) 
-           
-            
+            violations = self.constraint_executor.execute(adv[np.newaxis, :])[
+                0]
+            scores[i] = (self.alpha * pred[y] + self.beta *
+                         violations, np.copy(adv))
+
+            '''
             if score < best_score:
                 print('New score')
                 dist1 = np.linalg.norm(x - adv)
@@ -204,15 +215,14 @@ class TorchEvaluator(Evaluator):
                 best_adversarial = np.copy(adv)
                 dist1 = np.linalg.norm(x - best_adversarial)
                 print(f'dist after assignement {dist1}')
-            
-            
-            #dist = np.linalg.norm(best_adversarial - x, ord=distance)
-            #print(f'dist of best {dist}')
-            #if dist > eps:
-                #best_adversarial = x + (best_adversarial - x) * eps / dist
+            '''
+
+            # dist = np.linalg.norm(best_adversarial - x, ord=distance)
+            # print(f'dist of best {dist}')
+            # if dist > eps:
+            # best_adversarial = x + (best_adversarial - x) * eps / dist
         scores = sorted(scores, key=lambda k: k[0])
         return round(scores[0][0], 3), scores[0][1], misclassif[0], viols[0]
-        '''
 
 
 class SickitEvaluator(Evaluator):
