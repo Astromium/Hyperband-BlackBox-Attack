@@ -77,7 +77,7 @@ if __name__ == '__main__':
 
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
-    BATCH_SIZE = x_clean.shape[0]
+    BATCH_SIZE = 100  # x_clean.shape[0]
     eps = 0.2
     downsample = 3
     sampler = Sampler()
@@ -88,7 +88,7 @@ if __name__ == '__main__':
     success_rates_l2 = []
     exec_times_l2 = []
 
-    R_values = [81]
+    R_values = [243]
     history_dict = dict()
     '''
     for eps in perturbations:

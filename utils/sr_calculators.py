@@ -68,6 +68,7 @@ class TorchCalculator(SuccessRateCalculator):
         for i, (x, y) in enumerate(zip(self.data, self.labels)):
             pred = self.classifier.predict(x[np.newaxis, :])[0]
             if pred != y:
+                print(f'Example {i} doesnt count')
                 continue
 
             correct += 1
@@ -85,7 +86,7 @@ class TorchCalculator(SuccessRateCalculator):
             #     f'dist scaled {dist}')
 
             if pred != y:
-                print(f'adversarial {i}')
+                # print(f'adversarial {i}')
                 adversarials.append(best_candidate)
                 success_rate += 1
         eps = 0.0001 if correct == 0 else 0
@@ -108,7 +109,7 @@ class SickitCalculator(SuccessRateCalculator):
         for i, (x, y) in enumerate(zip(self.data, self.labels)):
             pred = self.classifier.predict(x[np.newaxis, :])[0]
             if pred != y:
-                # print('inside the if')
+                print(f'example {i} doesnt count')
                 continue
 
             correct += 1
