@@ -113,13 +113,24 @@ class Hyperband():
         scaler = joblib.load('./ressources/baseline_scaler.joblib')
         classifier = Pipeline(steps=[('preprocessing', scaler), ('model', TensorflowClassifier(load_model(self.classifier_path)))])
         constraints = get_url_relation_constraints()
-        print(len(self.x))
         final_objectives = []
+
         for j, (scores, configurations, candidates) in enumerate(zip(global_scores, global_configs, global_candidates)):
             print(f'Starting Evolution for example {j}')
             best_objectives = []
             for score, configuration, candidate in zip(scores, configurations, candidates):
-                problem = AdversarialProblem(x_clean=self.x[j], n_var=len(configuration), y_clean=self.y[j], classifier=classifier, constraints=constraints, features_min_max=features_min_max, scaler=scaler, configuration=configuration, int_features=int_features)
+                problem = AdversarialProblem(
+                    x_clean=self.x[j], 
+                    n_var=len(configuration), 
+                    y_clean=self.y[j], 
+                    classifier=classifier, 
+                    constraints=constraints, 
+                    features_min_max=features_min_max, 
+                    scaler=scaler, 
+                    configuration=configuration, 
+                    int_features=int_features, 
+                    eps=self.eps
+                )
 
                 ref_points = get_reference_directions(
                         "energy", problem.n_obj, self.R, seed=1
@@ -151,6 +162,7 @@ class Hyperband():
                     pred = classifier.predict_proba(adv[np.newaxis, :])[0]
                     print(f'pred of the optimal solution {i} : {pred}')
                     '''
+                    #print(f"Objective values {i}: {optimal_objectives[i]}")
                     if optimal_objectives[i][1] <= self.eps:
                         #print(f"Objective values {i}: {optimal_objectives[i]}")
                         optimals.append(optimal_objectives[i])
@@ -168,17 +180,20 @@ class Hyperband():
                 '''
             best_objectives = sorted(best_objectives, key=lambda k: k[0])
             print(f'best objectives for example {j} : {best_objectives}')
-            final_objectives.append(best_objectives[0])
+            if len(best_objectives) > 0:
+                final_objectives.append(best_objectives[0])
             
         
         print(f'final objectives across all examples {final_objectives}')
         sr = 0
-        cr = 0
+        cr = (classifier.predict(self.x) == 1).astype('int').sum()
         for i, obj in enumerate(final_objectives):
             if classifier.predict(self.x[i][np.newaxis, :])[0] != 1:
+                print(f'pred inside the if for example {i} {classifier.predict(self.x[i][np.newaxis, :])[0]}')
                 continue
-            cr += 1
-            if obj[0] < 0.5:
+
+            if obj[0] < 0.5 and obj[2] <= 0.00001:
+                print(f'adversarial {i}')
                 sr += 1
         print(f'Correct {cr}')
         print(f'Success rate {(sr / cr) * 100 }%')

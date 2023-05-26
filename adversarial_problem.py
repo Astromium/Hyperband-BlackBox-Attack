@@ -1,5 +1,5 @@
 import numpy as np
-from pymoo.core.problem import ElementwiseProblem
+from pymoo.core.problem import ElementwiseProblem, Problem
 from typing import Any, Union, Any, List
 from constraints.relation_constraint import BaseRelationConstraint
 from constraints.constraints_executor import NumpyConstraintsExecutor
@@ -13,6 +13,7 @@ NB_OBJECTIVES = 3
 def get_nb_objectives():
     return NB_OBJECTIVES
 
+
 def get_bounds(configuration, features_min, features_max, x):
     xl, xu = [], []
     for c in configuration:
@@ -21,20 +22,19 @@ def get_bounds(configuration, features_min, features_max, x):
     return xl, xu
 
 
-
-class AdversarialProblem(ElementwiseProblem):
+class AdversarialProblem(Problem):
     def __init__(
         self,
         x_clean: np.ndarray,
         n_var: int,
         y_clean: int,
         classifier: Any,
-        constraints: Union[List[BaseRelationConstraint]],
+        constraints: Union[List[BaseRelationConstraint], None],
         features_min_max: List,
         scaler: MinMaxScaler,
         configuration: List,
         int_features: np.ndarray,
-
+        eps: float,
         norm=2,
     ):
         # Parameters
@@ -47,19 +47,21 @@ class AdversarialProblem(ElementwiseProblem):
         self.scaler = scaler
         self.configuration = configuration
         self.int_features = int_features
+        self.eps = eps
         self.norm = norm
 
         # Computed attributes
-        #xl, xu = min(self.features_min_max[0]), 100#max(self.features_min_max[1])
-        #print(f'xl, xu {xl}, {xu}')
-        xl, xu = get_bounds(configuration=configuration, features_min=self.features_min_max[0], features_max=self.features_min_max[1], x=self.x_clean)
-        #print(f'xl == xu {np.array((xl == xu)).astype("int").sum()}')
-        #print(f'xu {xu}')
-        #xl, xu = 0.1, 0.9
+        # xl, xu = min(self.features_min_max[0]), 100#max(self.features_min_max[1])
+        # print(f'xl, xu {xl}, {xu}')
+        xl, xu = get_bounds(configuration=configuration,
+                            features_min=self.features_min_max[0], features_max=self.features_min_max[1], x=self.x_clean)
+        # print(f'xl == xu {np.array((xl == xu)).astype("int").sum()}')
+        # print(f'xu {xu}')
+        # xl, xu = 0.1, 0.9
         super().__init__(
             n_var=self.n_var,
             n_obj=get_nb_objectives(),
-            n_constr=0,
+            n_constr=2,
             xl=xl,
             xu=xu,
         )
@@ -68,7 +70,7 @@ class AdversarialProblem(ElementwiseProblem):
         return self.x_clean
 
     def _obj_misclassify(self, x: np.ndarray) -> np.ndarray:
-        y_pred = self.classifier.predict_proba(x)[0][self.y_clean]
+        y_pred = self.classifier.predict_proba(x)[:, self.y_clean]
         return y_pred
 
     def _obj_distance(self, x_1: np.ndarray, x_2: np.ndarray) -> np.ndarray:
@@ -79,20 +81,22 @@ class AdversarialProblem(ElementwiseProblem):
         executor = NumpyConstraintsExecutor(
             AndConstraint(self.constraints),
         )
-        return executor.execute(x[np.newaxis, :])[0]
-    
+        return executor.execute(x)
+
     def fix_feature_types(self, adv, x):
-        #print(f'adv before {adv}')
+        # print(f'adv before {adv}')
         adv = np.nan_to_num(x=adv, copy=True)
-        #print(f'adv after {adv}')
+        # print(f'adv after {adv}')
         for i, c in enumerate(self.configuration):
             if c in self.int_features:
+                # print(f'adv {adv}')
+                # print(f'adv[{c}] {adv[c]}')
                 adv[c] = math.ceil(
                     adv[c]) if x[i] < 0 else math.floor(adv[c])
-        return adv  
+        return adv
 
     def _evaluate(self, x, out, *args, **kwargs):
-       
+
         # print("Evaluate")
 
         # Sanity check
@@ -106,37 +110,24 @@ class AdversarialProblem(ElementwiseProblem):
         # --- Prepare necessary representation of the samples
 
         # Retrieve original representation
-        x_adv = np.copy(self.x_clean)
+        x_adv = np.tile(self.x_clean, (x.shape[0], 1))
         x = np.nan_to_num(x=x, copy=True)
-        x_adv[list(self.configuration)] += x
+        x_adv[:, list(self.configuration)] += x
 
-        adv_scaled = self.scaler.transform(x_adv[np.newaxis, :])[0]
-        x_scaled = self.scaler.transform(self.x_clean[np.newaxis, :])[0]
-        dist = np.linalg.norm(adv_scaled - x_scaled)
-        #print(f'dist after perturbating {dist}')
-        if self._obj_distance(x_1=adv_scaled, x_2=x_scaled) > 0.2:
-            adv_scaled = x_scaled + (adv_scaled - x_scaled) * 0.2 / self._obj_distance(x_1=adv_scaled, x_2=x_scaled)
-            dist = np.linalg.norm(adv_scaled - x_scaled)
-            #print(f'dist after projection {dist}')
-                # transform back to pb space    
-            adv = self.scaler.inverse_transform(adv_scaled[np.newaxis, :])[0]
+        x_adv_fixed = np.array([self.fix_feature_types(x1, x2)
+                               for x1, x2 in zip(x_adv, x)])
 
+        obj_misclassify = self._obj_misclassify(x_adv_fixed)
+        obj_distance = np.array([self._obj_distance(self.scaler.transform(x_adv.reshape(
+            1, -1)), self.scaler.transform(self.x_clean.reshape(1, -1))) for x_adv in x_adv_fixed])
 
-        x_adv = np.clip(x_adv, self.features_min_max[0], self.features_min_max[1])
-        x_adv = self.fix_feature_types(x_adv, x)
-        adv_scaled = self.scaler.transform(x_adv[np.newaxis, :])[0]
-        x_scaled = self.scaler.transform(self.x_clean[np.newaxis, :])[0]
-        dist = np.linalg.norm(adv_scaled - x_scaled)
-        #print(f'dist after casting {dist}')
-
-        obj_misclassify = self._obj_misclassify(x_adv[np.newaxis, :])
-        obj_distance = self._obj_distance(
-            self.scaler.transform(x_adv[np.newaxis, :])[0], self.scaler.transform(self.x_clean[np.newaxis, :])[0]
-        )
-
-        obj_constraints = self._calculate_constraints(x_adv)
+        obj_constraints = self._calculate_constraints(x_adv_fixed)
+        g1 = obj_distance - self.eps
+        g2 = obj_misclassify - 0.5
 
         F = [obj_misclassify, obj_distance, obj_constraints]
+        G = [g1, g2]
 
         # --- Output
         out["F"] = np.column_stack(F)
+        out["G"] = np.column_stack(G)
