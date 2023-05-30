@@ -114,19 +114,6 @@ class AdversarialProblem(Problem):
         x = np.nan_to_num(x=x, copy=True)
         x_adv[:, list(self.configuration)] += x
 
-        # adv_scaled = self.scaler.transform(x_adv)
-        # x_scaled = self.scaler.transform(self.x_clean[np.newaxis, :])[0]
-        # dist = np.linalg.norm(adv_scaled - x_scaled)
-        # # print(f'dist after perturbating {dist}')
-        # if self._obj_distance(x_1=adv_scaled, x_2=x_scaled) > 0.2:
-        #     adv_scaled = x_scaled + \
-        #         (adv_scaled - x_scaled) * 0.2 / \
-        #         self._obj_distance(x_1=adv_scaled, x_2=x_scaled)
-        #     dist = np.linalg.norm(adv_scaled - x_scaled)
-        #     # print(f'dist after projection {dist}')
-        #     # transform back to pb space
-        #     adv = self.scaler.inverse_transform(adv_scaled[np.newaxis, :])[0]
-
         x_adv_fixed = np.array([self.fix_feature_types(x1, x2)
                                for x1, x2 in zip(x_adv, x)])
 
