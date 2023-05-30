@@ -18,6 +18,7 @@ from tensorflow.keras.models import load_model
 from sklearn.pipeline import Pipeline
 from constraints.url_constraints import get_url_relation_constraints
 from pymoo.util.nds import fast_non_dominated_sort
+from utils.perturbation_generator import generate_perturbation
 import numpy as np
 import os
 import math
@@ -117,6 +118,7 @@ class Hyperband():
 
         for j, (scores, configurations, candidates) in enumerate(zip(global_scores, global_configs, global_candidates)):
             print(f'Starting Evolution for example {j}')
+            k = 0
             best_objectives = []
             for score, configuration, candidate in zip(scores, configurations, candidates):
                 problem = AdversarialProblem(
@@ -131,13 +133,17 @@ class Hyperband():
                     int_features=int_features, 
                     eps=self.eps
                 )
-
+                
                 ref_points = get_reference_directions(
                         "energy", problem.n_obj, self.R, seed=1
                 )
-
+                '''
+                ref_points = get_reference_directions(
+                        name="das-dennis", n_partitions=12, n_dim=problem.n_obj, n_points=91, seed=1
+                )
+                '''
+                #ref_points = get_reference_directions('uniform', self.R, problem.n_obj)
                 # get_sampling('real_random')
-
                 algorithm = RNSGA3(  # population size
                     n_offsprings=100,  # number of offsprings
                     sampling=FloatRandomSampling(),  # use the provided initial population
@@ -148,7 +154,7 @@ class Hyperband():
                     pop_per_ref_point=1,
                 )
 
-                res = minimize(problem, algorithm, termination=('n_gen', 100))
+                res = minimize(problem, algorithm, termination=('n_gen', 150))
 
                 optimal_solutions = res.pop.get("X")
                 optimal_objectives = res.pop.get("F")
@@ -179,24 +185,27 @@ class Hyperband():
                     print("------------------")
                 '''
             best_objectives = sorted(best_objectives, key=lambda k: k[0])
+            if len(best_objectives) == 0:
+                k += 1
             print(f'best objectives for example {j} : {best_objectives}')
             if len(best_objectives) > 0:
-                final_objectives.append(best_objectives[0])
+                final_objectives.append((best_objectives[0], j))
             
         
         print(f'final objectives across all examples {final_objectives}')
         sr = 0
         cr = (classifier.predict(self.x) == 1).astype('int').sum()
-        for i, obj in enumerate(final_objectives):
-            if classifier.predict(self.x[i][np.newaxis, :])[0] != 1:
-                print(f'pred inside the if for example {i} {classifier.predict(self.x[i][np.newaxis, :])[0]}')
+        for i, (obj, j) in enumerate(final_objectives):
+            print(f'pred for example {j} : {classifier.predict(self.x[j][np.newaxis, :])[0]}')
+            if classifier.predict(self.x[j][np.newaxis, :])[0] != 1:
+                print(f'pred inside the if for example {j} {classifier.predict(self.x[j][np.newaxis, :])[0]}')
                 continue
 
             if obj[0] < 0.5 and obj[2] <= 0.00001:
-                print(f'adversarial {i}')
+                print(f'adversarial {j} : pred {obj[0]}')
                 sr += 1
         print(f'Correct {cr}')
-        print(f'Success rate {(sr / cr) * 100 }%')
+        print(f'Success rate {(sr / (cr + k)) * 100 }%')
 
         # for b in zip(*results):
         #     scores, configs, candidates = [], [], []
