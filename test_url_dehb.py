@@ -21,6 +21,12 @@ from evaluators import TorchEvaluator
 from tensorflow.keras.models import load_model
 from ml_wrappers import wrap_model
 from utils.perturbation_generator import generate_perturbation
+from adversarial_problem import AdversarialProblem
+from pymoo.algorithms.moo.rnsga3 import RNSGA3
+from pymoo.factory import get_crossover, get_mutation, get_problem, get_reference_directions, get_termination, get_sampling
+from pymoo.optimize import minimize
+from pymoo.util.nds import fast_non_dominated_sort
+from pymoo.operators.sampling.rnd import FloatRandomSampling
 import joblib
 
 
@@ -141,7 +147,7 @@ host = 'localhost'
 shared_directory = '.'
 run_id = '0'
 min_budget = 1
-max_budget = 128
+max_budget = 81
 n_iterations = 3
 eta = 2
 
@@ -163,7 +169,9 @@ beta=1.0
 
 candidates = []
 start = timeit.default_timer()
-for i in range(BATCH_SIZE):
+final_objectives = []
+kk = 0
+for j in range(BATCH_SIZE):
     dehb.reset()
     trajectory, runtime, history = dehb.run(
         #total_cost=10,
@@ -176,8 +184,8 @@ for i in range(BATCH_SIZE):
         alpha=alpha,
         beta=beta,
         classifier=model_pipeline,
-        x_clean=x_clean[i],
-        y=y_clean[i],
+        x_clean=x_clean[j],
+        y=y_clean[j],
         eps=eps,
         distance=distance,
         features_min_max=features_min_max,
@@ -192,6 +200,22 @@ for i in range(BATCH_SIZE):
     # Last recorded function evaluation
     last_eval = history[-1]
     config, score, cost, budget, _info = last_eval
+    conf_dict = dict(dehb.vector_to_configspace(config))
+    l = list(conf_dict.keys())
+    for i in range(len(l)):
+        l[i] = l[i][7:]
+    for i,k in zip(l, list(conf_dict.keys())):
+        conf_dict[i] = conf_dict.pop(k)
+    
+    print(f'conf_dict {conf_dict}')
+    s = sorted([int(i) for i in conf_dict.keys()])
+    s = [str(i) for i in s]
+    d = {}
+    for k in s:
+        d[k] = conf_dict[k]
+
+    configuration = np.where(np.array(list(d.values())) == 1)[0]
+    print(f'configuration {configuration}')
     '''
     print("Last evaluated configuration, ")
     print(dehb.vector_to_configspace(config), end="")
@@ -199,7 +223,95 @@ for i in range(BATCH_SIZE):
         "took {:.3f} seconds to run.".format(score, budget, cost))
     print("The additional info attached: {}".format(_info))
     '''
+
+    problem = AdversarialProblem(
+        x_clean=x_clean[j], 
+        n_var=len(configuration), 
+        y_clean=y_clean[j], 
+        classifier=model_pipeline, 
+        constraints=constraints, 
+        features_min_max=features_min_max, 
+        scaler=scaler, 
+        configuration=configuration, 
+        int_features=int_features, 
+        eps=0.2
+    )
+                
+    ref_points = get_reference_directions(
+        "energy", problem.n_obj, max_budget, seed=1
+    )
+    '''
+                ref_points = get_reference_directions(
+                        name="das-dennis", n_partitions=12, n_dim=problem.n_obj, n_points=91, seed=1
+                )
+    '''
+                #ref_points = get_reference_directions('uniform', self.R, problem.n_obj)
+                # get_sampling('real_random')
+    algorithm = RNSGA3(  # population size
+        n_offsprings=100,  # number of offsprings
+        sampling=FloatRandomSampling(),  # use the provided initial population
+        crossover=get_crossover("real_sbx", prob=0.9, eta=15),
+        mutation=get_mutation("real_pm", eta=20),
+        eliminate_duplicates=True,
+        ref_points=ref_points,
+        pop_per_ref_point=1,
+    )
+
+    res = minimize(problem, algorithm, termination=('n_gen', 150))
+
+    optimal_solutions = res.pop.get("X")
+    optimal_objectives = res.pop.get("F")
+
     candidates.append(_info['adv'])
+    optimals = []
+    best_objectives = []
+    for i in range(len(optimal_solutions)):
+        '''
+                    adv = np.copy(x)
+                    adv[list(configuration)] += np.nan_to_num(optimal_solutions[i])
+                    adv = np.clip(adv, features_min_max[0], features_min_max[1])
+                    adv = self.fix_feature_types(optimal_solutions[i], adv, int_features, configuration)
+                    pred = classifier.predict_proba(adv[np.newaxis, :])[0]
+                    print(f'pred of the optimal solution {i} : {pred}')
+        '''
+                    #print(f"Objective values {i}: {optimal_objectives[i]}")
+        if optimal_objectives[i][1] <= 0.2:
+                        #print(f"Objective values {i}: {optimal_objectives[i]}")
+            optimals.append(optimal_objectives[i])
+                    #scores.append((sum(optimal_objectives[i]), optimal_solutions[i]))
+    if len(optimals) > 0:
+        optimals = sorted(optimals, key=lambda k: k[0])
+        best_objectives.append(optimals[0])
+        '''
+                fronts = fast_non_dominated_sort.fast_non_dominated_sort(np.array(optimals))
+                for front in fronts:
+                    print("Front:")
+                    for solution in front:
+                        print(optimals[solution])
+                    print("------------------")
+                '''
+    best_objectives = sorted(best_objectives, key=lambda k: k[0])
+    print(f'best objectives for example {j} : {best_objectives}')
+    if len(best_objectives) > 0:
+        kk += 1
+        final_objectives.append((best_objectives[0], j))
+            
+        
+print(f'final objectives across all examples {final_objectives}')
+sr = 0
+cr = (model_pipeline.predict(x_clean[:BATCH_SIZE]) == 1).astype('int').sum()
+for i, (obj, j) in enumerate(final_objectives):
+    print(f'pred for example {j} : {model_pipeline.predict(x_clean[j][np.newaxis, :])[0]}')
+    if model_pipeline.predict(x_clean[j][np.newaxis, :])[0] != 1:
+        print(f'pred inside the if for example {j} {model_pipeline.predict(x_clean[j][np.newaxis, :])[0]}')
+        continue
+
+    if obj[0] < 0.5 and obj[2] <= 0.00001:
+        print(f'adversarial {j} : pred {obj[0]}')
+        sr += 1
+print(f'Correct {cr}')
+print(f'Success rate {(sr / (cr + kk)) * 100 }%')
+
 end = timeit.default_timer()
 print(f'It took {(end - start) / 60}')
 candidates = np.array(candidates)
