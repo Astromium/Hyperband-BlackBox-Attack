@@ -13,7 +13,6 @@ class SuccessRateCalculator(ABC):
     labels: Any
     scores: Any
     candidates: List
-    configs: List
     scaler: Any
 
     @abstractmethod
@@ -55,35 +54,28 @@ class TfCalculator(SuccessRateCalculator):
 
 
 class TorchCalculator(SuccessRateCalculator):
-    def __init__(self, classifier, data, labels, scores, candidates, configs, scaler):
+    def __init__(self, classifier, data, labels, scores, candidates, scaler):
         super().__init__(classifier=classifier, data=data, labels=labels,
-                         scores=scores, candidates=candidates, configs=configs, scaler=scaler)
+                         scores=scores, candidates=candidates, scaler=scaler)
 
     def evaluate(self):
         correct = 0
         success_rate = 0
         adversarials = []
         best_candidates = []
-        best_configs_len = []
         for i, (x, y) in enumerate(zip(self.data, self.labels)):
             pred = self.classifier.predict(x[np.newaxis, :])[0]
             if pred != y:
-                print(f'Example {i} doesnt count')
                 continue
 
             correct += 1
             best_score_idx = np.argmin(self.scores[i])
             best_candidate = self.candidates[i][best_score_idx]
-            best_config = self.configs[i][best_score_idx]
-            best_configs_len.append(len(best_config))
+            bc_scaled = self.scaler.transform(best_candidate[np.newaxis, :])[0]
+            x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
+            dist = np.linalg.norm(bc_scaled - x_scaled)
             pred = self.classifier.predict(best_candidate[np.newaxis, :])[0]
             best_candidates.append(best_candidate)
-            best_candidate_scaled = self.scaler.transform(
-                best_candidate[np.newaxis, :])[0]
-            x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
-            dist = np.linalg.norm(best_candidate_scaled - x_scaled)
-            # print(
-            #     f'dist scaled {dist}')
 
             if pred != y:
                 # print(f'adversarial {i}')
@@ -91,8 +83,6 @@ class TorchCalculator(SuccessRateCalculator):
                 success_rate += 1
         eps = 0.0001 if correct == 0 else 0
         print(f'Correct {correct}')
-        print(
-            f'avg len config {sum(best_configs_len) / len(best_configs_len)}')
         return round(success_rate / correct + eps, 3), best_candidates, adversarials
 
 
@@ -109,7 +99,7 @@ class SickitCalculator(SuccessRateCalculator):
         for i, (x, y) in enumerate(zip(self.data, self.labels)):
             pred = self.classifier.predict(x[np.newaxis, :])[0]
             if pred != y:
-                print(f'example {i} doesnt count')
+                # print('inside the if')
                 continue
 
             correct += 1

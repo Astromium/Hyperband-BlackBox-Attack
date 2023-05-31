@@ -150,32 +150,45 @@ class TorchEvaluator(Evaluator):
                 configuration=configuration, features_min=features_min_max[0], features_max=features_min_max[1], x=x)
             adv[list(configuration)] += perturbation
 
-            # print(f'dist after perturbating {dist}')
-
             adv_scaled = self.scaler.transform(adv[np.newaxis, :])[0]
             x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
             dist = np.linalg.norm(adv_scaled - x_scaled, ord=distance)
-            # print(f'dist before projection {dist}')
             if dist > eps:
                 adv_scaled = x_scaled + (adv_scaled - x_scaled) * eps / dist
                 # transform back to pb space
                 adv = self.scaler.inverse_transform(
                     adv_scaled[np.newaxis, :])[0]
-            # dist = np.linalg.norm(adv_scaled - x_scaled, ord=distance)
-            # print(f'dist after projection {dist}')
+
             # clipping
             adv = np.clip(adv, features_min_max[0], features_min_max[1])
+            # casting
             adv = self.fix_feature_types(
                 perturbation=perturbation, adv=adv, int_features=int_features, configuration=configuration)
 
             pred = classifier.predict_proba(adv[np.newaxis, :])[0]
-            violations = self.constraint_executor.execute(adv[np.newaxis, :])[
-                0]
-            dist = np.linalg.norm(self.scaler.transform(
-                adv[np.newaxis, :])[0] - x_scaled) - eps
-            scores[i] = (self.alpha * pred[y] + self.beta *
-                         violations, np.copy(adv))
+            if self.constraints:
+                violations = self.constraint_executor.execute(adv[np.newaxis, :])[
+                    0]
+                scores[i] = (self.alpha * pred[y] + self.beta *
+                             violations, np.copy(adv))
+            else:
+                scores[i] = (self.alpha * pred[y], np.copy(adv))
 
+            '''
+            if score < best_score:
+                print('New score')
+                dist1 = np.linalg.norm(x - adv)
+                print(f'dist of adv {dist1}')
+                best_score = score
+                best_adversarial = np.copy(adv)
+                dist1 = np.linalg.norm(x - best_adversarial)
+                print(f'dist after assignement {dist1}')
+            '''
+
+            # dist = np.linalg.norm(best_adversarial - x, ord=distance)
+            # print(f'dist of best {dist}')
+            # if dist > eps:
+            # best_adversarial = x + (best_adversarial - x) * eps / dist
         scores = sorted(scores, key=lambda k: k[0])
         return round(scores[0][0], 3), scores[0][1], misclassif[0], viols[0]
 

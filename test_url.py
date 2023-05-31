@@ -121,34 +121,33 @@ if __name__ == '__main__':
 
     for R in R_values:
         url_evaluator = TorchEvaluator(
-            constraints=constraints, scaler=scaler, alpha=1.0, beta=1.0)
+            constraints=constraints, scaler=scaler, alpha=0.9, beta=0.1)
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
 
-        hp = Hyperband(objective=url_evaluator, classifier_path=classifier_path, x=x_clean[:BATCH_SIZE], y=y_clean[:BATCH_SIZE], sampler=sampler,
+        hp = Hyperband(objective=url_evaluator, classifier=model_pipeline, x=x_clean[:BATCH_SIZE], y=y_clean[:BATCH_SIZE], sampler=sampler,
                        eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=downsample, distance=distance, seed=seed)
         profiler = cProfile.Profile()
         profiler.enable()
         scores, configs, candidates, _, _, _ = hp.generate(mutables=None, features_min_max=(
             min_constraints, max_constraints), int_features=int_features)
         profiler.disable()
+        print(scores)
         # stats = pstats.Stats(profiler).sort_stats(pstats.SortKey.TIME)
         # stats.print_stats()
         # stats.dump_stats('results.prof')
 
         end = timeit.default_timer()
         print(f'Exec time {round((end - start) / 60, 3)}')
-        model_nn = TensorflowClassifier(
-            load_model('./ressources/baseline_nn.model'))
+        model_tf = TensorflowClassifier(load_model(classifier_path))
         model_pipeline = Pipeline(
-            steps=[('preprocessing', preprocessing_pipeline), ('model', model_nn)])
-        success_rate_calculator = TorchCalculator(
-            classifier=model_pipeline, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates, configs=configs, scaler=scaler)
+            steps=[('preprocessing', preprocessing_pipeline), ('model', model_tf)])
+        success_rate_calculator = TorchCalculator(classifier=model_pipeline, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(
+            scores), candidates=candidates, scaler=scaler)
         success_rate, best_candidates, adversarials = success_rate_calculator.evaluate()
         print(
             f'success rate {success_rate}, len best_candidates {len(best_candidates)}, len adversarials {len(adversarials)}')
-        adversarials, best_candidates = scaler.inverse_transform(
-            np.array(adversarials)), scaler.inverse_transform(np.array(best_candidates))
+        # adversarials, best_candidates = scaler.inverse_transform(np.array(adversarials)), scaler.inverse_transform(np.array(best_candidates))
         # print(f'\n Execution Time {round((end - start) / 60, 3)}\n')
         # print(f'Success rate over {BATCH_SIZE} examples (M) : {success_rate * 100}')
         # print(f'len adversarials {len(adversarials)}')
