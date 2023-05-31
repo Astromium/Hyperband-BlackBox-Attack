@@ -165,7 +165,7 @@ class Hyperband():
                     pred = classifier.predict_proba(adv[np.newaxis, :])[0]
                     print(f'pred of the optimal solution {i} : {pred}')
                     '''
-                    # print(f"Objective values {i}: {optimal_objectives[i]}")
+                    print(f"Objective values {i}: {optimal_objectives[i]}")
                     if optimal_objectives[i][1] <= self.eps:
                         # print(f"Objective values {i}: {optimal_objectives[i]}")
                         optimals.append(optimal_objectives[i])
@@ -184,22 +184,22 @@ class Hyperband():
             best_objectives = sorted(best_objectives, key=lambda k: k[0])
             print(f'best objectives for example {j} : {best_objectives}')
             if len(best_objectives) > 0:
-                final_objectives.append(best_objectives[0])
+                final_objectives.append((best_objectives[0], j))
 
         print(f'final objectives across all examples {final_objectives}')
         sr = 0
         cr = (classifier.predict(self.x) == 1).astype('int').sum()
-        for i, obj in enumerate(final_objectives):
-            if classifier.predict(self.x[i][np.newaxis, :])[0] != 1:
+        for i, (obj, j) in enumerate(final_objectives):
+            if classifier.predict(self.x[j][np.newaxis, :])[0] != 1:
                 print(
-                    f'pred inside the if for example {i} {classifier.predict(self.x[i][np.newaxis, :])[0]}')
+                    f'pred inside the if for example {j} {classifier.predict(self.x[j][np.newaxis, :])[0]}')
                 continue
             if obj[0] < 0.5 and obj[2] <= 0.00001:
-                print(f'adversarial {i}')
+                print(f'adversarial {j}')
                 sr += 1
         print(f'Correct {cr}')
         print(
-            f'Success rate {(sr / (cr + (cr - len(final_objectives)))) * 100 }%')
+            f'Success rate {(sr / cr) * 100 }%')
 
         # for b in zip(*results):
         #     scores, configs, candidates = [], [], []
