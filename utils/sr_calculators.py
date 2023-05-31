@@ -74,6 +74,7 @@ class TorchCalculator(SuccessRateCalculator):
             bc_scaled = self.scaler.transform(best_candidate[np.newaxis, :])[0]
             x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
             dist = np.linalg.norm(bc_scaled - x_scaled)
+            print(f'dist scaled {dist}')
             pred = self.classifier.predict(best_candidate[np.newaxis, :])[0]
             best_candidates.append(best_candidate)
 
