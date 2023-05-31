@@ -135,7 +135,7 @@ class Hyperband():
                 )
                 
                 ref_points = get_reference_directions(
-                        "energy", problem.n_obj, self.R, seed=1
+                        "energy", problem.n_obj, 100, seed=1
                 )
                 '''
                 ref_points = get_reference_directions(
@@ -185,8 +185,6 @@ class Hyperband():
                     print("------------------")
                 '''
             best_objectives = sorted(best_objectives, key=lambda k: k[0])
-            if len(best_objectives) == 0:
-                k += 1
             print(f'best objectives for example {j} : {best_objectives}')
             if len(best_objectives) > 0:
                 final_objectives.append((best_objectives[0], j))
@@ -205,7 +203,7 @@ class Hyperband():
                 print(f'adversarial {j} : pred {obj[0]}')
                 sr += 1
         print(f'Correct {cr}')
-        print(f'Success rate {(sr / (cr + k)) * 100 }%')
+        print(f'Success rate {(sr / cr ) * 100 }%')
 
         # for b in zip(*results):
         #     scores, configs, candidates = [], [], []
