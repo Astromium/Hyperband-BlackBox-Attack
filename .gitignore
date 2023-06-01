@@ -1,5 +1,6 @@
 __pycache__/*
 data/*
-utils/__pycache__
-history.pkl
 temp/*
+data/*
+temp/*
+data/*

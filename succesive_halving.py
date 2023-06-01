@@ -8,11 +8,13 @@ from numpy.typing import NDArray
 from sampler import Sampler
 from evaluators import Evaluator
 from utils.perturbation_generator import generate_perturbation
-from utils.tensorflow_classifier import TensorflowClassifier
+from utils.tensorflow_classifier import TensorflowClassifier, BotnetClassifier
 from tensorflow.keras.models import load_model
+from ml_wrappers import wrap_model
 from sklearn.pipeline import Pipeline
 import joblib
-preprocessing_pipeline = joblib.load('./ressources/baseline_scaler.joblib')
+preprocessing_pipeline = joblib.load(
+    './ressources/custom_botnet_scaler.joblib')
 
 
 class SuccessiveHalving():
@@ -55,7 +57,7 @@ class SuccessiveHalving():
         self.R = R
         self.classifier_path = classifier_path
         self.classifier = Pipeline(steps=[('preprocessing', preprocessing_pipeline), (
-            'model', TensorflowClassifier(load_model(self.classifier_path)))])
+            'model', wrap_model(load_model(self.classifier_path), self.x, model_task='classification'))])
 
     def process_one(self, candidate, idx, configuration, budget, history, history_mis, history_vio):
         new_score, new_candidate, misclassif, viol = self.objective.evaluate(

@@ -1,55 +1,36 @@
+import pstats
+import cProfile
+from mlc.datasets.dataset_factory import get_dataset
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.pipeline import Pipeline
+import warnings
+import pickle
+import joblib
+import timeit
+from tensorflow.keras.models import load_model
+from utils.tensorflow_classifier import BotnetClassifier
+from utils.model import Net
+from ml_wrappers import wrap_model
+from constraints.relation_constraint import AndConstraint
+from constraints.url_constraints import get_url_relation_constraints
+from constraints.constraints_executor import NumpyConstraintsExecutor
+from sklearn.model_selection import train_test_split
+from utils.sr_calculators import TorchCalculator
+from sampler import Sampler
+from evaluators import TorchEvaluator
+from hyperband import Hyperband
+import pandas as pd
+import numpy as np
+import torch
 import os
 import tensorflow as tf
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-import torch
-import numpy as np
-import pandas as pd
-from hyperband import Hyperband
-from evaluators import TorchEvaluator
-from sampler import Sampler
-from utils.sr_calculators import TorchCalculator
-from sklearn.model_selection import train_test_split
-from constraints.constraints_executor import NumpyConstraintsExecutor
-from constraints.url_constraints import get_url_relation_constraints
-from constraints.relation_constraint import AndConstraint
 from ml_wrappers import wrap_model
-from utils.model import Net
-from utils.tensorflow_classifier import TensorflowClassifier
-from tensorflow.keras.models import load_model
-import timeit
-import joblib
-import pickle
-import warnings
-import cProfile, pstats
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import MinMaxScaler
-from mlc.datasets.dataset_factory import get_dataset
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+tf.compat.v1.disable_eager_execution()
 warnings.filterwarnings(action='ignore')
 
-# load dataset
-ds = get_dataset('ctu_13_neris')
-X, y = ds.get_x_y()
-metadata = ds.get_metadata()
 
-scaler = MinMaxScaler()
-X = scaler.fit_transform(X)
-X_test, y_test = X[143046:], y[143046:]
-
-# filter non botnet examples
-botnet = np.where(y_test == 1)[0]
-X_test_botnet, y_test_botnet = X_test[botnet], y_test[botnet]
-
-scaler = preprocessing_pipeline = joblib.load('./ressources/baseline_scaler.joblib')
-
-
-
-#get mutable features
-mutables = metadata.index[metadata['mutable'] == True].tolist()
-min_constraints = metadata['min'].to_list()[:-1]
-max_constraints = metadata['max'].to_list()[:-1]
-features_min_max = (min_constraints, max_constraints)
-feature_types = metadata.index[metadata['type'] == 'int'].to_list()
-#print(f'metadata {metadata}')
+# print(f'metadata {metadata}')
 
 
 if __name__ == '__main__':
@@ -57,12 +38,36 @@ if __name__ == '__main__':
     constraints = get_url_relation_constraints()
     executor = NumpyConstraintsExecutor(AndConstraint(constraints))
 
-    model_pipeline = Pipeline(steps=[('preprocessing', scaler), ('model', model)])
+    # load dataset
+    ds = get_dataset('ctu_13_neris')
+    X, y = ds.get_x_y()
+    metadata = ds.get_metadata()
+    scaler = joblib.load('./ressources/custom_botnet_scaler.joblib')
+    X = X.to_numpy()
+    print(f'shape of X {X.shape}')
+    # scaler.fit(X)
+    # X = scaler.fit_transform(X)
+    X_test, y_test = X[143046:], y[143046:]
+
+    # filter non botnet examples
+    botnet = np.where(y_test == 1)[0]
+    X_test_botnet, y_test_botnet = X_test[botnet], y_test[botnet]
+    # get mutable features
+    mutables = metadata.index[metadata['mutable'] == True].tolist()
+    min_constraints = metadata['min'].to_list()[:-1]
+    max_constraints = metadata['max'].to_list()[:-1]
+    features_min_max = (min_constraints, max_constraints)
+    print(f'len bound {len(min_constraints)}, {len(max_constraints)}')
+    int_features = metadata.index[metadata['type'] == 'int'].to_list()
+
+    # mdl = tf.saved_model.load('./ressources/nn_moeva.model')
+    # preds = mdl.predict(X_test)
+    # print(f'preds {preds}')
 
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
-    BATCH_SIZE = 500#x_clean.shape[0]
-    eps = 0.2
+    BATCH_SIZE = 50  # X_test_botnet.shape[0]
+    eps = 4
     downsample = 3
     sampler = Sampler()
     distance = 2
@@ -74,6 +79,11 @@ if __name__ == '__main__':
 
     R_values = [81]
     history_dict = dict()
+
+    model = load_model('./ressources/model_botnet.h5')
+    model_pipeline = Pipeline(
+        steps=[('preprocessing', scaler), ('model', wrap_model(model, X_test_botnet, model_task='classification'))])
+
     '''
     for eps in perturbations:
         start = timeit.default_timer()
@@ -102,31 +112,36 @@ if __name__ == '__main__':
     args_correct = (preds == y_clean[:BATCH_SIZE]).astype('int')
     x_correct, y_correct = x_clean[args_correct], y_clean[args_correct]
     '''
-        
+
     for R in R_values:
-        url_evaluator = TorchEvaluator(constraints=None, scaler=scaler, alpha=1.0, beta=1.0)
+        url_evaluator = TorchEvaluator(
+            constraints=None, scaler=scaler, alpha=1.0, beta=1.0)
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
-        
-        hp = Hyperband(objective=url_evaluator, classifier_path=classifier_path, x=x_clean[:BATCH_SIZE], y=y_clean[:BATCH_SIZE], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=downsample, distance=distance, seed=seed)
+
+        hp = Hyperband(objective=url_evaluator, classifier_path=classifier_path, x=X_test_botnet[40:BATCH_SIZE], y=y_test_botnet[40:BATCH_SIZE], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=len(
+            mutables)-1, R=R, downsample=downsample, distance=distance, seed=seed)
         profiler = cProfile.Profile()
         profiler.enable()
-        scores, configs, candidates, _, _, _ = hp.generate(mutables=None, features_min_max=(min_constraints,max_constraints), int_features=int_features)
+        scores, configs, candidates, _, _, _ = hp.generate(mutables=mutables, features_min_max=(
+            min_constraints, max_constraints), int_features=int_features)
         profiler.disable()
-        #stats = pstats.Stats(profiler).sort_stats(pstats.SortKey.TIME)
-        #stats.print_stats()
-        #stats.dump_stats('results.prof')
+        # stats = pstats.Stats(profiler).sort_stats(pstats.SortKey.TIME)
+        # stats.print_stats()
+        # stats.dump_stats('results.prof')
 
         end = timeit.default_timer()
         print(f'Exec time {round((end - start) / 60, 3)}')
-        #print(f'scores {scores}')
-        #load model
-        model = tf.keras.models.load_model('./ressources/model_botnet.h5')
-        model_pipeline = Pipeline(steps=[('preprocessing', scaler), ('model', model)])
-        success_rate_calculator = TorchCalculator(classifier=model_pipeline, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates, scaler=scaler)
+        # print(f'scores {scores}')
+        # load model
+
+        success_rate_calculator = TorchCalculator(classifier=model_pipeline, data=X_test_botnet[40:BATCH_SIZE], labels=y_test_botnet[40:BATCH_SIZE], scores=np.array(
+            scores), candidates=candidates, scaler=scaler)
+        # print(f'scores {scores}')
         success_rate, best_candidates, adversarials = success_rate_calculator.evaluate()
-        print(f'success rate {success_rate}, len best_candidates {len(best_candidates)}, len adversarials {len(adversarials)}')
-        #adversarials, best_candidates = scaler.inverse_transform(np.array(adversarials)), scaler.inverse_transform(np.array(best_candidates))
+        print(
+            f'success rate {success_rate}, len best_candidates {len(best_candidates)}, len adversarials {len(adversarials)}')
+        # adversarials, best_candidates = scaler.inverse_transform(np.array(adversarials)), scaler.inverse_transform(np.array(best_candidates))
         '''
         violations = np.array([executor.execute(adv[np.newaxis, :])[0] for adv in adversarials])
         violations_candidates = np.array([executor.execute(adv[np.newaxis, :])[0] for adv in best_candidates])
@@ -138,11 +153,9 @@ if __name__ == '__main__':
     
     print(f'History {history_dict}')
     '''
-    
-    
-    #scores = softmax(model.predict(np.array(adversarials)), axis=1)
-    #print(f'scores {scores}')
-    #print(f'Violations for x_clean {[executor.execute(x[np.newaxis, :]) for x in x_clean]}')
-    #dist = np.linalg.norm(adversarials[0][0] - X_test_phishing[0])
-    #print(f'dist {dist}')
-    
+
+    # scores = softmax(model.predict(np.array(adversarials)), axis=1)
+    # print(f'scores {scores}')
+    # print(f'Violations for x_clean {[executor.execute(x[np.newaxis, :]) for x in x_clean]}')
+    # dist = np.linalg.norm(adversarials[0][0] - X_test_phishing[0])
+    # print(f'dist {dist}')

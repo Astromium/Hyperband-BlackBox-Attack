@@ -7,7 +7,7 @@ from constraints.relation_constraint import AndConstraint
 from sklearn.preprocessing import MinMaxScaler
 import math
 
-NB_OBJECTIVES = 3
+NB_OBJECTIVES = 2
 
 
 def get_nb_objectives():
@@ -121,11 +121,11 @@ class AdversarialProblem(Problem):
         obj_distance = np.array([self._obj_distance(self.scaler.transform(x_adv.reshape(
             1, -1)), self.scaler.transform(self.x_clean.reshape(1, -1))) for x_adv in x_adv_fixed])
 
-        obj_constraints = self._calculate_constraints(x_adv_fixed)
+        # obj_constraints = self._calculate_constraints(x_adv_fixed)
         g1 = obj_distance - self.eps
         g2 = obj_misclassify - 0.5
 
-        F = [obj_misclassify, obj_distance, obj_constraints]
+        F = [obj_misclassify, obj_distance]
         G = [g1, g2]
 
         # --- Output

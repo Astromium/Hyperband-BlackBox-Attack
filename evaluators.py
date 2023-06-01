@@ -201,10 +201,13 @@ class TorchEvaluator(Evaluator):
                 perturbation=perturbation, adv=adv, int_features=int_features, configuration=configuration)
 
             pred = classifier.predict_proba(adv[np.newaxis, :])[0]
-            violations = self.constraint_executor.execute(adv[np.newaxis, :])[
-                0]
-            scores[i] = (self.alpha * pred[y] + self.beta *
-                         violations, np.copy(adv))
+            if self.constraints:
+                violations = self.constraint_executor.execute(adv[np.newaxis, :])[
+                    0]
+                scores[i] = (self.alpha * pred[y] + self.beta *
+                             violations, np.copy(adv))
+            else:
+                scores[i] = (self.alpha * pred[y], np.copy(adv))
 
             '''
             if score < best_score:

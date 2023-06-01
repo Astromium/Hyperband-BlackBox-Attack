@@ -13,11 +13,13 @@ from pymoo.factory import get_crossover, get_mutation, get_problem, get_referenc
 from pymoo.optimize import minimize
 from pymoo.util.nds import fast_non_dominated_sort
 from pymoo.operators.sampling.rnd import FloatRandomSampling
-from utils.tensorflow_classifier import TensorflowClassifier
+from utils.tensorflow_classifier import TensorflowClassifier, BotnetClassifier
 from tensorflow.keras.models import load_model
 from sklearn.pipeline import Pipeline
 from constraints.url_constraints import get_url_relation_constraints
 from pymoo.util.nds import fast_non_dominated_sort
+from utils.perturbation_generator import generate_perturbation
+from ml_wrappers import wrap_model
 import numpy as np
 import os
 import math
@@ -111,16 +113,17 @@ class Hyperband():
             global_viols.extend(history_viols)
 
         # Start the RNSGA search for best candidates for each example
-        scaler = joblib.load('./ressources/baseline_scaler.joblib')
-        classifier = Pipeline(steps=[('preprocessing', scaler), ('model', TensorflowClassifier(
-            load_model(self.classifier_path)))])
+        scaler = joblib.load('./ressources/custom_botnet_scaler.joblib')
+        classifier = Pipeline(steps=[('preprocessing', scaler), ('model',
+                                                                 wrap_model(load_model(self.classifier_path), self.x, model_task='classification'))])
+        preds = classifier.predict(self.x)
+        print(f'preds {preds}')
         constraints = get_url_relation_constraints()
         final_objectives = []
 
         for j, (scores, configurations, candidates) in enumerate(zip(global_scores, global_configs, global_candidates)):
             print(f'Starting Evolution for example {j}')
             best_objectives = []
-            k = 0
             for score, configuration, candidate in zip(scores, configurations, candidates):
                 problem = AdversarialProblem(
                     x_clean=self.x[j],
@@ -138,9 +141,13 @@ class Hyperband():
                 ref_points = get_reference_directions(
                     "energy", problem.n_obj, self.R, seed=1
                 )
-
+                '''
+                ref_points = get_reference_directions(
+                        name="das-dennis", n_partitions=12, n_dim=problem.n_obj, n_points=91, seed=1
+                )
+                '''
+                # ref_points = get_reference_directions('uniform', self.R, problem.n_obj)
                 # get_sampling('real_random')
-
                 algorithm = RNSGA3(  # population size
                     n_offsprings=100,  # number of offsprings
                     sampling=FloatRandomSampling(),  # use the provided initial population
@@ -190,16 +197,21 @@ class Hyperband():
         sr = 0
         cr = (classifier.predict(self.x) == 1).astype('int').sum()
         for i, (obj, j) in enumerate(final_objectives):
+            print(
+                f'pred for example {j} : {classifier.predict(self.x[j][np.newaxis, :])[0]}')
             if classifier.predict(self.x[j][np.newaxis, :])[0] != 1:
                 print(
                     f'pred inside the if for example {j} {classifier.predict(self.x[j][np.newaxis, :])[0]}')
                 continue
-            if obj[0] < 0.5 and obj[2] <= 0.00001:
-                print(f'adversarial {j}')
+
+            if obj[0] < 0.5:
+                print(f'adversarial {j} : pred {obj[0]}')
                 sr += 1
         print(f'Correct {cr}')
-        print(
-            f'Success rate {(sr / cr) * 100 }%')
+        if cr == 0:
+            print('Success rate : 0%')
+        else:
+            print(f'Success rate {(sr / cr ) * 100 }%')
 
         # for b in zip(*results):
         #     scores, configs, candidates = [], [], []

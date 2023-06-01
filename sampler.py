@@ -15,7 +15,7 @@ class Sampler():
             sample_list = list(range(0, dimensions))
 
         for i in range(num_configs):
-            n = random.randint(1, max_configuration_size + 1)
+            n = random.randint(40, max_configuration_size + 1)
             config = random.sample(sample_list, n)
             configurations[i] = config
 
