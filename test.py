@@ -1,12 +1,11 @@
-import multiprocessing as mp
-import torch
-from joblib import Parallel, delayed
-import os
+from mlc.datasets.dataset_factory import get_dataset
+from sklearn.preprocessing import MinMaxScaler
+import joblib
 
-def worker(model):
-    print(f'hello world from {os.getpid()} and {model}')
+ds = get_dataset("ctu_13_neris")
+X, _ = ds.get_x_y()
 
-if __name__ == '__main__':
-    model = torch.load('./ressources/model_mnist.pth')
+scaler = MinMaxScaler(feature_range=(0, 1))
+scaler.fit(X)
 
-    Parallel(n_jobs=-1, backend='multiprocessing', prefer='processes')(delayed(worker)(model) for i in range(mp.cpu_count()))
+joblib.dump(scaler, './ressources/custom_botnet_scaler.joblib')

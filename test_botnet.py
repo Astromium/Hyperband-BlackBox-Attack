@@ -24,8 +24,10 @@ import numpy as np
 import torch
 import os
 import tensorflow as tf
+from ml_wrappers import wrap_model
+from constraints.botnet_constraints import get_relation_constraints
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-# tf.compat.v1.disable_eager_execution()
+tf.compat.v1.disable_eager_execution()
 warnings.filterwarnings(action='ignore')
 
 
@@ -34,15 +36,18 @@ warnings.filterwarnings(action='ignore')
 
 if __name__ == '__main__':
     print(f'Hello {os.getpid()} from test_url')
-    constraints = get_url_relation_constraints()
-    executor = NumpyConstraintsExecutor(AndConstraint(constraints))
 
     # load dataset
     ds = get_dataset('ctu_13_neris')
     X, y = ds.get_x_y()
+    feature_names = X.columns.to_list()
+    # print(f'columns {X.columns.to_list()}')
+    constraints = get_relation_constraints(X)
+    executor = NumpyConstraintsExecutor(AndConstraint(
+        constraints), feature_names=feature_names)
     metadata = ds.get_metadata()
-    scaler = joblib.load('./ressources/botnet_scaler.joblib')
-    X = X.to_numpy()[:, :-1]
+    scaler = joblib.load('./ressources/custom_botnet_scaler.joblib')
+    X = X.to_numpy()
     print(f'shape of X {X.shape}')
     # scaler.fit(X)
     # X = scaler.fit_transform(X)
@@ -51,11 +56,14 @@ if __name__ == '__main__':
     # filter non botnet examples
     botnet = np.where(y_test == 1)[0]
     X_test_botnet, y_test_botnet = X_test[botnet], y_test[botnet]
-    print(f'y_test {y_test}')
+
+    violations = executor.execute(X_test_botnet[40:50])
+    print(f'violations {violations}')
+
     # get mutable features
     mutables = metadata.index[metadata['mutable'] == True].tolist()
-    min_constraints = metadata['min'].to_list()[:-2]
-    max_constraints = metadata['max'].to_list()[:-2]
+    min_constraints = metadata['min'].to_list()[:-1]
+    max_constraints = metadata['max'].to_list()[:-1]
     features_min_max = (min_constraints, max_constraints)
     print(f'len bound {len(min_constraints)}, {len(max_constraints)}')
     int_features = metadata.index[metadata['type'] == 'int'].to_list()
@@ -66,12 +74,12 @@ if __name__ == '__main__':
 
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
-    BATCH_SIZE = 100  # X_test_botnet.shape[0]
-    eps = 0.2
+    BATCH_SIZE = 50  # X_test_botnet.shape[0]
+    eps = 4
     downsample = 3
     sampler = Sampler()
     distance = 2
-    classifier_path = './ressources/nn_moeva.model'
+    classifier_path = './ressources/model_botnet.h5'
     seed = 202374
     np.random.seed(seed)
     success_rates_l2 = []
@@ -110,11 +118,11 @@ if __name__ == '__main__':
 
     for R in R_values:
         url_evaluator = TorchEvaluator(
-            constraints=None, scaler=scaler, alpha=1.0, beta=1.0)
+            constraints=constraints, scaler=scaler, alpha=1.0, beta=1.0, feature_names=feature_names)
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
 
-        hp = Hyperband(objective=url_evaluator, classifier_path=classifier_path, x=X_test_botnet[:BATCH_SIZE], y=y_test_botnet[:BATCH_SIZE], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=len(
+        hp = Hyperband(objective=url_evaluator, classifier_path=classifier_path, x=X_test_botnet[40:BATCH_SIZE], y=y_test_botnet[40:BATCH_SIZE], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=len(
             mutables)-1, R=R, downsample=downsample, distance=distance, seed=seed)
         profiler = cProfile.Profile()
         profiler.enable()
@@ -127,31 +135,35 @@ if __name__ == '__main__':
 
         end = timeit.default_timer()
         print(f'Exec time {round((end - start) / 60, 3)}')
+        print(f'scores {scores}')
         # print(f'scores {scores}')
         # load model
 
-        model = BotnetClassifier(load_model('./ressources/nn_moeva.model'))
+        model = load_model(classifier_path)
         model_pipeline = Pipeline(
-            steps=[('preprocessing', scaler), ('model', model)])
+            steps=[('preprocessing', scaler), ('model', wrap_model(model, X_test_botnet, model_task="classification"))])
 
-        success_rate_calculator = TorchCalculator(classifier=model_pipeline, data=X_test_botnet[:BATCH_SIZE], labels=y_test_botnet[:BATCH_SIZE], scores=np.array(
+        success_rate_calculator = TorchCalculator(classifier=model_pipeline, data=X_test_botnet[40:BATCH_SIZE], labels=y_test_botnet[40:BATCH_SIZE], scores=np.array(
             scores), candidates=candidates, scaler=scaler)
         # print(f'scores {scores}')
         success_rate, best_candidates, adversarials = success_rate_calculator.evaluate()
         print(
             f'success rate {success_rate}, len best_candidates {len(best_candidates)}, len adversarials {len(adversarials)}')
         # adversarials, best_candidates = scaler.inverse_transform(np.array(adversarials)), scaler.inverse_transform(np.array(best_candidates))
-        '''
-        violations = np.array([executor.execute(adv[np.newaxis, :])[0] for adv in adversarials])
-        violations_candidates = np.array([executor.execute(adv[np.newaxis, :])[0] for adv in best_candidates])
+
+        violations = np.array(
+            [executor.execute(adv[np.newaxis, :])[0] for adv in adversarials])
+        violations_candidates = np.array(
+            [executor.execute(adv[np.newaxis, :])[0] for adv in best_candidates])
         tolerance = 0.0001
         satisfaction = (violations < tolerance).astype('int').sum()
-        satisfaction_candidates = (violations_candidates < tolerance).astype('int').sum()
-        #print(f'Constraints satisfaction (C&M) {(success_rate * 100) - satisfaction}')
-        history_dict[R] = {'M': round(success_rate * 100, 2), 'C&M': round((satisfaction * 100) / BATCH_SIZE, 2), 'C': round((satisfaction_candidates * 100) / len(best_candidates), 2), 'Execution time': round((end - start) / 60, 3)}
-    
+        satisfaction_candidates = (
+            violations_candidates < tolerance).astype('int').sum()
+        # print(f'Constraints satisfaction (C&M) {(success_rate * 100) - satisfaction}')
+        history_dict[R] = {'M': round(success_rate * 100, 2), 'C&M': round((satisfaction * 100) / BATCH_SIZE, 2), 'C': round(
+            (satisfaction_candidates * 100) / len(best_candidates), 2), 'Execution time': round((end - start) / 60, 3)}
+
     print(f'History {history_dict}')
-    '''
 
     # scores = softmax(model.predict(np.array(adversarials)), axis=1)
     # print(f'scores {scores}')

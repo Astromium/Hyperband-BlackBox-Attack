@@ -10,6 +10,7 @@ from sklearn.preprocessing import MinMaxScaler
 from utils.mutation_generator import generate_mutations
 import numpy as np
 import math
+import timeit
 
 
 @dataclass
@@ -71,11 +72,11 @@ class TfEvaluator(Evaluator):
 
 
 class TorchEvaluator(Evaluator):
-    def __init__(self, constraints: Union[List[BaseRelationConstraint], None], scaler: Union[MinMaxScaler, None], alpha: float, beta: float):
+    def __init__(self, constraints: Union[List[BaseRelationConstraint], None], scaler: Union[MinMaxScaler, None], alpha: float, beta: float, feature_names: List[str]):
         super().__init__()
         self.constraints = constraints
         self.constraint_executor = NumpyConstraintsExecutor(
-            AndConstraint(constraints)) if constraints is not None else None
+            AndConstraint(constraints), feature_names=feature_names) if constraints is not None else None
         self.scaler = scaler
         self.alpha = alpha
         self.beta = beta
@@ -167,8 +168,13 @@ class TorchEvaluator(Evaluator):
 
             pred = classifier.predict_proba(adv[np.newaxis, :])[0]
             if self.constraints:
+                # print('Calculating violations')
+                start = timeit.default_timer()
                 violations = self.constraint_executor.execute(adv[np.newaxis, :])[
                     0]
+                end = timeit.default_timer()
+                print(f'violations took {(end - start)}')
+                # print('Done Calculating violations')
                 scores[i] = (self.alpha * pred[y] + self.beta *
                              violations, np.copy(adv))
             else:

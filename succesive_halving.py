@@ -16,7 +16,7 @@ from ml_wrappers import wrap_model
 import joblib
 import tensorflow as tf
 # preprocessing_pipeline = joblib.load('./ressources/baseline_scaler.joblib')
-scaler = joblib.load('./ressources/botnet_scaler.joblib')
+scaler = joblib.load('./ressources/custom_botnet_scaler.joblib')
 
 
 class SuccessiveHalving():
@@ -58,8 +58,8 @@ class SuccessiveHalving():
         self.hyperband_bracket = hyperband_bracket
         self.R = R
         self.classifier_path = classifier_path
-        self.classifier = Pipeline(steps=[('preprocessing', scaler), (
-            'model', BotnetClassifier(tf.saved_model.load(self.classifier_path)))])
+        self.classifier = Pipeline(steps=[('preprocessing', scaler), ('model', wrap_model(
+            load_model(self.classifier_path), self.x, model_task="classification"))])
 
     def process_one(self, candidate, idx, configuration, budget, history, history_mis, history_vio):
         new_score, new_candidate, misclassif, viol = self.objective.evaluate(
