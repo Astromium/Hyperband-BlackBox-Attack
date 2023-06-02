@@ -4,6 +4,7 @@ from typing import List, Any
 from numpy.typing import NDArray
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
+from pymoo.util.nds import fast_non_dominated_sort
 
 
 @dataclass
@@ -69,7 +70,10 @@ class TorchCalculator(SuccessRateCalculator):
                 continue
 
             correct += 1
-            best_score_idx = np.argmin(self.scores[i])
+            fronts = fast_non_dominated_sort.fast_non_dominated_sort(
+                self.scores[i])
+            best_score_idx = fronts[0][0]
+            # best_score_idx = np.argmin(self.scores[i])
             best_candidate = self.candidates[i][best_score_idx]
             bc_scaled = self.scaler.transform(best_candidate[np.newaxis, :])[0]
             x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
@@ -77,7 +81,8 @@ class TorchCalculator(SuccessRateCalculator):
             print(f'dist scaled {dist}')
             pred = self.classifier.predict(best_candidate[np.newaxis, :])[0]
             best_candidates.append(best_candidate)
-
+            print(
+                f'pred {self.classifier.predict_proba(best_candidate[np.newaxis, :])[0]}; y {y}')
             if pred != y:
                 # print(f'adversarial {i}')
                 adversarials.append(best_candidate)

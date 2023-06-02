@@ -74,7 +74,7 @@ if __name__ == '__main__':
 
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
-    BATCH_SIZE = 50  # X_test_botnet.shape[0]
+    BATCH_SIZE = 100  # X_test_botnet.shape[0]
     eps = 4
     downsample = 3
     sampler = Sampler()
@@ -122,7 +122,7 @@ if __name__ == '__main__':
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
 
-        hp = Hyperband(objective=url_evaluator, classifier_path=classifier_path, x=X_test_botnet[40:BATCH_SIZE], y=y_test_botnet[40:BATCH_SIZE], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=len(
+        hp = Hyperband(objective=url_evaluator, classifier_path=classifier_path, x=X_test_botnet[10:BATCH_SIZE], y=y_test_botnet[10:BATCH_SIZE], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=len(
             mutables)-1, R=R, downsample=downsample, distance=distance, seed=seed)
         profiler = cProfile.Profile()
         profiler.enable()
@@ -143,7 +143,7 @@ if __name__ == '__main__':
         model_pipeline = Pipeline(
             steps=[('preprocessing', scaler), ('model', wrap_model(model, X_test_botnet, model_task="classification"))])
 
-        success_rate_calculator = TorchCalculator(classifier=model_pipeline, data=X_test_botnet[40:BATCH_SIZE], labels=y_test_botnet[40:BATCH_SIZE], scores=np.array(
+        success_rate_calculator = TorchCalculator(classifier=model_pipeline, data=X_test_botnet[10:BATCH_SIZE], labels=y_test_botnet[10:BATCH_SIZE], scores=np.array(
             scores), candidates=candidates, scaler=scaler)
         # print(f'scores {scores}')
         success_rate, best_candidates, adversarials = success_rate_calculator.evaluate()
@@ -155,6 +155,8 @@ if __name__ == '__main__':
             [executor.execute(adv[np.newaxis, :])[0] for adv in adversarials])
         violations_candidates = np.array(
             [executor.execute(adv[np.newaxis, :])[0] for adv in best_candidates])
+        print(f'violations {violations}')
+        print(f'violations_candidates {violations_candidates}')
         tolerance = 0.0001
         satisfaction = (violations < tolerance).astype('int').sum()
         satisfaction_candidates = (
