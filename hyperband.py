@@ -116,6 +116,8 @@ class Hyperband():
         constraints = get_url_relation_constraints()
         final_objectives = []
         sr = 0
+        misclassifs = 0
+        viols = 0
         for j, (scores, configurations, candidates) in enumerate(zip(global_scores, global_configs, global_candidates)):
             print(f'Starting Evolution for example {j}')
             k = 0
@@ -161,6 +163,9 @@ class Hyperband():
                 optimal_solutions = res.pop.get("X")
                 optimal_objectives = res.pop.get("F")
                 optimals = []
+                misclassifs += np.any(np.array([obj[0] for obj in optimal_objectives]) < 0.5)
+                tolerance = 0.0001
+                viols += np.any(np.array([obj[2] for obj in optimal_objectives]) <= tolerance)
                 for i in range(len(optimal_solutions)):
                     #print(f"Objective values {i}: {optimal_objectives[i]}")
                     if optimal_objectives[i][1] <= self.eps:
@@ -256,6 +261,10 @@ class Hyperband():
                 sr += 1
         print(f'Correct {cr}')
         print(f'Success rate {(sr / cr ) * 100 }%')
+        print(f'Misclassifs {(misclassifs / cr ) * 100 }%')
+        print(f'Violations {(viols / cr ) * 100 }%')
+        history = {(self.R, self.eps) : {'M': (misclassifs / cr ) * 100, 'C&M': (sr / cr ) * 100, 'C': (viols / cr ) * 100 }}
+        print(f'history {history}')
 
         # for b in zip(*results):
         #     scores, configs, candidates = [], [], []

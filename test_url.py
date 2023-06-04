@@ -75,7 +75,7 @@ if __name__ == '__main__':
 
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
-    BATCH_SIZE = x_clean.shape[0]
+    BATCH_SIZE = 1#x_clean.shape[0]
     eps = 0.2
     downsample = 3
     sampler = Sampler()
@@ -134,6 +134,7 @@ if __name__ == '__main__':
         end = timeit.default_timer()
         print(f'Exec time {round((end - start) / 60, 3)}')
         #print(f'scores {scores}')
+        '''
         model_tf = TensorflowClassifier(load_model(classifier_path))
         model_pipeline = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', model_tf)])
         success_rate_calculator = TorchCalculator(classifier=model_pipeline, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates, scaler=scaler)
@@ -148,7 +149,7 @@ if __name__ == '__main__':
         satisfaction_candidates = (violations_candidates < tolerance).astype('int').sum()
         #print(f'Constraints satisfaction (C&M) {(success_rate * 100) - satisfaction}')
         history_dict[R] = {'M': round(success_rate * 100, 2), 'C&M': round((satisfaction * 100) / BATCH_SIZE, 2), 'C': round((satisfaction_candidates * 100) / len(best_candidates), 2), 'Execution time': round((end - start) / 60, 3)}
-    
+    '''
     print(f'History {history_dict}')
     
     
