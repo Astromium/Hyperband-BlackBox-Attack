@@ -34,7 +34,7 @@ class Hyperband():
     seed: int
 
 
-    def generate(self, mutables=None, features_min_max=None, int_features=None, scaler=None):
+    def generate(self, mutables=None, features_min_max=None, int_features=None):
         if self.downsample <= 1:
             raise ValueError('Downsample must be > 1')
         
@@ -61,8 +61,7 @@ class Hyperband():
              'bracket_budget': max(round(self.R / (self.downsample ** i)), 1),
              'seed': self.seed,
              'hyperband_bracket': i,
-             'R': self.R,
-             'scaler': scaler
+             'R': self.R
             } 
             for i in reversed(range(s_max + 1)) 
         ]

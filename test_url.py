@@ -21,6 +21,7 @@ import pickle
 import warnings
 import cProfile, pstats
 from sklearn.pipeline import Pipeline
+from itertools import product
 warnings.filterwarnings(action='ignore')
 
 scaler = preprocessing_pipeline = joblib.load('./ressources/baseline_scaler.joblib')
@@ -28,28 +29,7 @@ scaler = preprocessing_pipeline = joblib.load('./ressources/baseline_scaler.jobl
 
 if __name__ == '__main__':
     print(f'Hello {os.getpid()} from test_url')
-    df = pd.read_csv('./ressources/url.csv')
-    X = np.array(df[df.columns.drop('is_phishing')])
-    y = np.array(df['is_phishing'])
-
-    merged = np.arange(len(X))
-    i_train, i_test = train_test_split(
-        merged,
-        random_state=100,
-        shuffle=True,
-        stratify=y[merged],
-        test_size=0.2
-    )
-
-    #scaler = MinMaxScaler()
     
-    X = scaler.transform(X)
-    X_train, X_test = X[i_train], X[i_test]
-    y_train, y_test = y[i_train], y[i_test]
-
-    phishing = np.where(y_test == 1)[0]
-    X_test_phishing, y_test_phishing = X_test[phishing], y_test[phishing]
-
     x_clean = np.load('./ressources/baseline_X_test_candidates.npy')
     y_clean = np.load('./ressources/baseline_y_test_candidates.npy')
     #x_clean = scaler.transform(x_clean)
@@ -64,16 +44,8 @@ if __name__ == '__main__':
 
     constraints = get_url_relation_constraints()
     executor = NumpyConstraintsExecutor(AndConstraint(constraints))
-
-    model_tf = TensorflowClassifier(load_model(r'ressources\baseline_nn.model'))
-    model = Net()
-    model = torch.load('./ressources/model_url.pth')
-    model = wrap_model(model, x_clean, model_task='classification')
-    rf = joblib.load('./ressources/baseline_rf.model')
-    model_pipeline = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', model)])
-
     # Parameters for Hyperband
-    dimensions = X_test.shape[1]
+    dimensions = x_clean.shape[1]
     BATCH_SIZE = x_clean.shape[0]
     eps = 0.2
     downsample = 3
@@ -81,11 +53,14 @@ if __name__ == '__main__':
     distance = 2
     classifier_path = './ressources/baseline_nn.model'
     seed = 202374
-    np.random.seed(seed)
+    #np.random.seed(seed)
     success_rates_l2 = []
     exec_times_l2 = []
 
-    R_values = [81]
+    R_values = [81, 243, 390]
+    epsilons = [0.2, 0.25, 0.3]
+    params = list(product(R_values, epsilons))
+    print(params)
     history_dict = dict()
     '''
     for eps in perturbations:
@@ -116,7 +91,7 @@ if __name__ == '__main__':
     x_correct, y_correct = x_clean[args_correct], y_clean[args_correct]
     '''
         
-    for R in R_values:
+    for (R, eps) in params:
         url_evaluator = TorchEvaluator(constraints=constraints, scaler=scaler, alpha=1.0, beta=1.0)
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
@@ -134,7 +109,7 @@ if __name__ == '__main__':
         print(f'Exec time {round((end - start) / 60, 3)}')
         model_tf = TensorflowClassifier(load_model(classifier_path))
         model_pipeline = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', model_tf)])
-        success_rate_calculator = TorchCalculator(classifier=model_pipeline, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates, scaler=scaler)
+        success_rate_calculator = TorchCalculator(classifier=model_pipeline, data=x_clean[:BATCH_SIZE], labels=y_clean[:BATCH_SIZE], scores=np.array(scores), candidates=candidates, scaler=scaler, eps=eps)
         success_rate, best_candidates, adversarials = success_rate_calculator.evaluate()
         print(f'success rate {success_rate}, len best_candidates {len(best_candidates)}, len adversarials {len(adversarials)}')
         #adversarials, best_candidates = scaler.inverse_transform(np.array(adversarials)), scaler.inverse_transform(np.array(best_candidates))
@@ -145,10 +120,12 @@ if __name__ == '__main__':
         satisfaction = (violations < tolerance).astype('int').sum()
         satisfaction_candidates = (violations_candidates < tolerance).astype('int').sum()
         #print(f'Constraints satisfaction (C&M) {(success_rate * 100) - satisfaction}')
-        history_dict[R] = {'M': round(success_rate * 100, 2), 'C&M': round((satisfaction * 100) / BATCH_SIZE, 2), 'C': round((satisfaction_candidates * 100) / len(best_candidates), 2), 'Execution time': round((end - start) / 60, 3)}
+        history_dict[(R, eps)] = {'M': round(success_rate * 100, 2), 'C&M': round((satisfaction * 100) / BATCH_SIZE, 2), 'C': round((satisfaction_candidates * 100) / len(best_candidates), 2), 'Execution time': round((end - start) / 60, 3)}
+        
     
     print(f'History {history_dict}')
-    
+    with open('experiments.pkl', 'wb') as f:
+        pickle.dump(history_dict, f)
     
     #scores = softmax(model.predict(np.array(adversarials)), axis=1)
     #print(f'scores {scores}')

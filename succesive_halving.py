@@ -14,7 +14,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler
 from ml_wrappers import wrap_model
 import joblib
-#preprocessing_pipeline = joblib.load('./ressources/baseline_scaler.joblib')
+preprocessing_pipeline = joblib.load('./ressources/baseline_scaler.joblib')
 
 class SuccessiveHalving():
     def __init__(self, objective: Evaluator,
@@ -35,7 +35,7 @@ class SuccessiveHalving():
     int_features: Union[NDArray, None],
     seed: int,
     hyperband_bracket: int,
-    R: int, scaler: MinMaxScaler):
+    R: int):
         self.objective = objective
         self.sampler = sampler
         self.x = x
@@ -54,9 +54,8 @@ class SuccessiveHalving():
         self.seed = seed
         self.hyperband_bracket = hyperband_bracket
         self.R = R
-        self.scaler = scaler
         self.classifier_path = classifier_path
-        self.classifier = Pipeline(steps=[('preprocessing', self.scaler), ('model', wrap_model(load_model(self.classifier_path), self.x, model_task='classification'))])
+        self.classifier = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', TensorflowClassifier(load_model(self.classifier_path)))])
     
     def process_one(self, candidate, idx, configuration, budget, history, history_mis, history_vio):
         new_score, new_candidate, misclassif, viol = self.objective.evaluate(
@@ -152,8 +151,8 @@ class SuccessiveHalving():
 
             for i in range(self.hyperband_bracket + 1):
                 budget = self.bracket_budget * pow(self.downsample, i) if self.bracket_budget * pow(self.downsample, i) < self.R else self.R
-                #results = [self.process_one(candidate=None, idx=idx, configuration=configuration, budget=budget, history=history, history_mis=history_mis, history_vio=history_vio) for configuration in tqdm(configurations, total=len(configurations), desc=f'SH round {i}, Evaluating {len(configurations)} with budget of {budget}')]
-                results = [self.process_one(candidate=None, idx=idx, configuration=configuration, budget=budget, history=history, history_mis=history_mis, history_vio=history_vio) for configuration in configurations]
+                results = [self.process_one(candidate=None, idx=idx, configuration=configuration, budget=budget, history=history, history_mis=history_mis, history_vio=history_vio) for configuration in tqdm(configurations, total=len(configurations), desc=f'SH round {i}, Evaluating {len(configurations)} with budget of {budget}')]
+                #results = [self.process_one(candidate=None, idx=idx, configuration=configuration, budget=budget, history=history, history_mis=history_mis, history_vio=history_vio) for configuration in configurations]
                 
                 scores = [r[0] for r in results]
                 candidates = [r[1] for r in results]

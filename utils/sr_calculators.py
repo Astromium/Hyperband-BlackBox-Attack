@@ -13,6 +13,7 @@ class SuccessRateCalculator(ABC):
     scores: Any
     candidates: List
     scaler: Any
+    eps: float
 
     @abstractmethod
     def evaluate(self):
@@ -49,8 +50,8 @@ class TfCalculator(SuccessRateCalculator):
         return round(success_rate / correct + eps, 3), best_candidates, adversarials
     
 class TorchCalculator(SuccessRateCalculator):
-    def __init__(self, classifier, data, labels, scores, candidates, scaler):
-        super().__init__(classifier=classifier, data=data, labels=labels, scores=scores, candidates=candidates, scaler=scaler)
+    def __init__(self, classifier, data, labels, scores, candidates, scaler, eps):
+        super().__init__(classifier=classifier, data=data, labels=labels, scores=scores, candidates=candidates, scaler=scaler, eps=eps)
 
     def evaluate(self):
         correct = 0
@@ -68,11 +69,10 @@ class TorchCalculator(SuccessRateCalculator):
             bc_scaled = self.scaler.transform(best_candidate[np.newaxis, :])[0]
             x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
             dist = np.linalg.norm(bc_scaled - x_scaled)
-            print(f'dist scaled {dist}')
             pred = self.classifier.predict(best_candidate[np.newaxis, :])[0]
             best_candidates.append(best_candidate)
 
-            if pred != y:
+            if pred != y and dist <= self.eps:
                 #print(f'adversarial {i}')
                 adversarials.append(best_candidate)
                 success_rate += 1
