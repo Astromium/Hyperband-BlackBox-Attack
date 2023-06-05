@@ -13,6 +13,7 @@ from utils.model import Net
 from ml_wrappers import wrap_model
 from constraints.relation_constraint import AndConstraint
 from constraints.url_constraints import get_url_relation_constraints
+from constraints.botnet_constraints import get_relation_constraints
 from constraints.constraints_executor import NumpyConstraintsExecutor
 from sklearn.model_selection import train_test_split
 from utils.sr_calculators import TorchCalculator
@@ -35,14 +36,20 @@ warnings.filterwarnings(action='ignore')
 
 if __name__ == '__main__':
     print(f'Hello {os.getpid()} from test_url')
-    constraints = get_url_relation_constraints()
-    executor = NumpyConstraintsExecutor(AndConstraint(constraints))
 
     # load dataset
     ds = get_dataset('ctu_13_neris')
     X, y = ds.get_x_y()
+    X = X.iloc[:, :-1]
+
+    feature_names = X.columns.to_list()
+    # print(f'columns {X.columns.to_list()}')
+    constraints = get_relation_constraints(X)
+    executor = NumpyConstraintsExecutor(AndConstraint(
+        constraints), feature_names=feature_names)
+
     metadata = ds.get_metadata()
-    scaler = joblib.load('./ressources/custom_botnet_scaler.joblib')
+    scaler = joblib.load('./ressources/botnet_scaler.joblib')
     X = X.to_numpy()
     print(f'shape of X {X.shape}')
     # scaler.fit(X)
@@ -54,8 +61,8 @@ if __name__ == '__main__':
     X_test_botnet, y_test_botnet = X_test[botnet], y_test[botnet]
     # get mutable features
     mutables = metadata.index[metadata['mutable'] == True].tolist()
-    min_constraints = metadata['min'].to_list()[:-1]
-    max_constraints = metadata['max'].to_list()[:-1]
+    min_constraints = metadata['min'].to_list()[:-2]
+    max_constraints = metadata['max'].to_list()[:-2]
     features_min_max = (min_constraints, max_constraints)
     print(f'len bound {len(min_constraints)}, {len(max_constraints)}')
     int_features = metadata.index[metadata['type'] == 'int'].to_list()
@@ -66,7 +73,7 @@ if __name__ == '__main__':
 
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
-    BATCH_SIZE = 50  # X_test_botnet.shape[0]
+    BATCH_SIZE = X_test_botnet.shape[0]
     eps = 4
     downsample = 3
     sampler = Sampler()
@@ -115,7 +122,7 @@ if __name__ == '__main__':
 
     for R in R_values:
         url_evaluator = TorchEvaluator(
-            constraints=None, scaler=scaler, alpha=1.0, beta=1.0)
+            constraints=constraints, scaler=scaler, alpha=1.0, beta=1.0, feature_names=feature_names)
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
 

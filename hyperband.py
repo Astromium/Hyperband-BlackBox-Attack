@@ -17,8 +17,12 @@ from utils.tensorflow_classifier import TensorflowClassifier, BotnetClassifier
 from tensorflow.keras.models import load_model
 from sklearn.pipeline import Pipeline
 from constraints.url_constraints import get_url_relation_constraints
+from constraints.botnet_constraints import get_relation_constraints
 from pymoo.util.nds import fast_non_dominated_sort
 from utils.perturbation_generator import generate_perturbation
+from mlc.datasets.dataset_factory import get_dataset
+from constraints.relation_constraint import AndConstraint
+from constraints.constraints_executor import NumpyConstraintsExecutor
 from ml_wrappers import wrap_model
 import numpy as np
 import os
@@ -113,27 +117,47 @@ class Hyperband():
             global_viols.extend(history_viols)
 
         # Start the RNSGA search for best candidates for each example
-        scaler = joblib.load('./ressources/custom_botnet_scaler.joblib')
+        scaler = joblib.load('./ressources/botnet_scaler.joblib')
         classifier = Pipeline(steps=[('preprocessing', scaler), ('model',
                                                                  wrap_model(load_model(self.classifier_path), self.x, model_task='classification'))])
         preds = classifier.predict(self.x)
         print(f'preds {preds}')
-        constraints = get_url_relation_constraints()
-        final_objectives = []
 
+        ds = get_dataset('ctu_13_neris')
+        X, y = ds.get_x_y()
+
+        feature_names = X.columns.to_list()
+        # print(f'columns {X.columns.to_list()}')
+        constraints = get_relation_constraints(X)
+        executor = NumpyConstraintsExecutor(AndConstraint(
+            constraints), feature_names=feature_names)
+        final_objectives = []
+        sr = 0
+        misclassifs = 0
+        viols = 0
         for j, (scores, configurations, candidates) in enumerate(zip(global_scores, global_configs, global_candidates)):
             print(f'Starting Evolution for example {j}')
+            k = 0
             best_objectives = []
-            for score, configuration, candidate in zip(scores, configurations, candidates):
+            fronts = fast_non_dominated_sort.fast_non_dominated_sort(
+                np.array(scores))
+            best = fronts[0][0]
+            best_adv = candidates[best]
+            if classifier.predict(self.x[j][np.newaxis, :])[0] != self.y[j] and classifier.predict(best_adv[np.newaxis, :])[0] == self.y[j]:
+                sr += 1
+                continue
+            else:
+                best_config = configurations[best]
+
                 problem = AdversarialProblem(
                     x_clean=self.x[j],
-                    n_var=len(configuration),
+                    n_var=len(best_config),
                     y_clean=self.y[j],
                     classifier=classifier,
-                    constraints=constraints,
+                    constraints_executor=executor,
                     features_min_max=features_min_max,
                     scaler=scaler,
-                    configuration=configuration,
+                    configuration=best_config,
                     int_features=int_features,
                     eps=self.eps
                 )
@@ -141,12 +165,63 @@ class Hyperband():
                 ref_points = get_reference_directions(
                     "energy", problem.n_obj, self.R, seed=1
                 )
-                '''
+                # ref_points = get_reference_directions('uniform', self.R, problem.n_obj)
+                # get_sampling('real_random')
+                algorithm = RNSGA3(  # population size
+                    n_offsprings=100,  # number of offsprings
+                    sampling=FloatRandomSampling(),  # use the provided initial population
+                    crossover=get_crossover("real_sbx", prob=0.9, eta=15),
+                    mutation=get_mutation("real_pm", eta=20),
+                    eliminate_duplicates=True,
+                    ref_points=ref_points,
+                    pop_per_ref_point=1,
+                )
+
+                res = minimize(problem, algorithm, termination=('n_gen', 500))
+
+                optimal_solutions = res.pop.get("X")
+                optimal_objectives = res.pop.get("F")
+                optimals = []
+                misclassifs += np.any(np.array([obj[0]
+                                      for obj in optimal_objectives]) < 0.5)
+                tolerance = 0.0001
+                viols += np.any(np.array([obj[2]
+                                for obj in optimal_objectives]) <= tolerance)
+                for i in range(len(optimal_solutions)):
+                    # print(f"Objective values {i}: {optimal_objectives[i]}")
+                    if optimal_objectives[i][1] <= self.eps:
+                        # print(f"Objective values {i}: {optimal_objectives[i]}")
+                        optimals.append(optimal_objectives[i])
+                    # scores.append((sum(optimal_objectives[i]), optimal_solutions[i]))
+                if len(optimals) > 0:
+                    optimals = sorted(optimals, key=lambda k: k[0])
+                    print(f'best objective for example {j} {optimals[0]}')
+                    final_objectives.append((optimals[0], j))
+
+            '''
+            for score, configuration, candidate in zip(scores, configurations, candidates):
+                problem = AdversarialProblem(
+                    x_clean=self.x[j], 
+                    n_var=len(configuration), 
+                    y_clean=self.y[j], 
+                    classifier=classifier, 
+                    constraints=constraints, 
+                    features_min_max=features_min_max, 
+                    scaler=scaler, 
+                    configuration=configuration, 
+                    int_features=int_features, 
+                    eps=self.eps
+                )
+                
+                ref_points = get_reference_directions(
+                        "energy", problem.n_obj, self.R, seed=1
+                )
+                
                 ref_points = get_reference_directions(
                         name="das-dennis", n_partitions=12, n_dim=problem.n_obj, n_points=91, seed=1
                 )
-                '''
-                # ref_points = get_reference_directions('uniform', self.R, problem.n_obj)
+                
+                #ref_points = get_reference_directions('uniform', self.R, problem.n_obj)
                 # get_sampling('real_random')
                 algorithm = RNSGA3(  # population size
                     n_offsprings=100,  # number of offsprings
@@ -164,37 +239,37 @@ class Hyperband():
                 optimal_objectives = res.pop.get("F")
                 optimals = []
                 for i in range(len(optimal_solutions)):
-                    '''
+                    
                     adv = np.copy(x)
                     adv[list(configuration)] += np.nan_to_num(optimal_solutions[i])
                     adv = np.clip(adv, features_min_max[0], features_min_max[1])
                     adv = self.fix_feature_types(optimal_solutions[i], adv, int_features, configuration)
                     pred = classifier.predict_proba(adv[np.newaxis, :])[0]
                     print(f'pred of the optimal solution {i} : {pred}')
-                    '''
-                    print(f"Objective values {i}: {optimal_objectives[i]}")
+                    
+                    #print(f"Objective values {i}: {optimal_objectives[i]}")
                     if optimal_objectives[i][1] <= self.eps:
-                        # print(f"Objective values {i}: {optimal_objectives[i]}")
+                        #print(f"Objective values {i}: {optimal_objectives[i]}")
                         optimals.append(optimal_objectives[i])
-                    # scores.append((sum(optimal_objectives[i]), optimal_solutions[i]))
+                    #scores.append((sum(optimal_objectives[i]), optimal_solutions[i]))
                 if len(optimals) > 0:
                     optimals = sorted(optimals, key=lambda k: k[0])
                     best_objectives.append(optimals[0])
-                '''
+                
                 fronts = fast_non_dominated_sort.fast_non_dominated_sort(np.array(optimals))
                 for front in fronts:
                     print("Front:")
                     for solution in front:
                         print(optimals[solution])
                     print("------------------")
-                '''
+                
             best_objectives = sorted(best_objectives, key=lambda k: k[0])
             print(f'best objectives for example {j} : {best_objectives}')
             if len(best_objectives) > 0:
                 final_objectives.append((best_objectives[0], j))
+            '''
 
         print(f'final objectives across all examples {final_objectives}')
-        sr = 0
         cr = (classifier.predict(self.x) == 1).astype('int').sum()
         for i, (obj, j) in enumerate(final_objectives):
             print(
@@ -204,14 +279,16 @@ class Hyperband():
                     f'pred inside the if for example {j} {classifier.predict(self.x[j][np.newaxis, :])[0]}')
                 continue
 
-            if obj[0] < 0.5:
+            if obj[0] < 0.5 and obj[2] <= 0.00001:
                 print(f'adversarial {j} : pred {obj[0]}')
                 sr += 1
         print(f'Correct {cr}')
-        if cr == 0:
-            print('Success rate : 0%')
-        else:
-            print(f'Success rate {(sr / cr ) * 100 }%')
+        print(f'Success rate {(sr / cr ) * 100 }%')
+        print(f'Misclassifs {(misclassifs / cr ) * 100 }%')
+        print(f'Violations {(viols / cr ) * 100 }%')
+        history = {(self.R, self.eps): {'M': (misclassifs / cr) *
+                                        100, 'C&M': (sr / cr) * 100, 'C': (viols / cr) * 100}}
+        print(f'history {history}')
 
         # for b in zip(*results):
         #     scores, configs, candidates = [], [], []

@@ -12,9 +12,10 @@ from utils.tensorflow_classifier import TensorflowClassifier, BotnetClassifier
 from tensorflow.keras.models import load_model
 from ml_wrappers import wrap_model
 from sklearn.pipeline import Pipeline
+from pymoo.util.nds import fast_non_dominated_sort
 import joblib
 preprocessing_pipeline = joblib.load(
-    './ressources/custom_botnet_scaler.joblib')
+    './ressources/botnet_scaler.joblib')
 
 
 class SuccessiveHalving():
@@ -156,8 +157,17 @@ class SuccessiveHalving():
 
                 scores = [r[0] for r in results]
                 candidates = [r[1] for r in results]
-                top_indices = np.argsort(scores)[:max(
+                fronts = fast_non_dominated_sort.fast_non_dominated_sort(
+                    np.array(scores))
+                # top_indices = np.argsort(scores)[:max(
+                #     int(len(scores) / self.downsample), 1)]
+                flattened = []
+                for front in fronts:
+                    for v in front:
+                        flattened.append(v)
+                top_indices = flattened[:max(
                     int(len(scores) / self.downsample), 1)]
+                # print(f'top indices {top_indices}')
                 configurations = [configurations[j] for j in top_indices]
                 candidates = [candidates[j] for j in top_indices]
                 scores = [scores[j] for j in top_indices]
