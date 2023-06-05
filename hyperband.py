@@ -1,10 +1,8 @@
 from succesive_halving import SuccessiveHalving
-from typing import Any, List
 from dataclasses import dataclass
 from evaluators import Evaluator
 from numpy.typing import NDArray
 from sampler import Sampler
-from worker import Worker
 from joblib import Parallel, delayed
 import os
 import math

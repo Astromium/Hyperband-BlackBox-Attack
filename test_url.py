@@ -1,4 +1,3 @@
-import pstats
 import cProfile
 from itertools import product
 from sklearn.pipeline import Pipeline
@@ -8,19 +7,15 @@ import joblib
 import timeit
 from tensorflow.keras.models import load_model
 from utils.tensorflow_classifier import TensorflowClassifier
-from utils.model import Net
-from ml_wrappers import wrap_model
 from constraints.relation_constraint import AndConstraint
 from constraints.url_constraints import get_url_relation_constraints
 from constraints.constraints_executor import NumpyConstraintsExecutor
-from sklearn.model_selection import train_test_split
 from utils.sr_calculators import TorchCalculator
 from sampler import Sampler
 from evaluators import TorchEvaluator
 from hyperband import Hyperband
 import pandas as pd
 import numpy as np
-import torch
 import os
 import argparse
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'

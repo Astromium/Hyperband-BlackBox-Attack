@@ -2,7 +2,6 @@ import math
 import numpy as np
 from tqdm import tqdm
 from keras.models import load_model
-from dataclasses import dataclass
 from typing import Any, List, Union
 from numpy.typing import NDArray
 from sampler import Sampler
@@ -11,8 +10,6 @@ from utils.perturbation_generator import generate_perturbation
 from utils.tensorflow_classifier import TensorflowClassifier
 from tensorflow.keras.models import load_model
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import MinMaxScaler
-from ml_wrappers import wrap_model
 import joblib
 preprocessing_pipeline = joblib.load('./ressources/baseline_scaler.joblib')
 
