@@ -22,8 +22,18 @@ import pandas as pd
 import numpy as np
 import torch
 import os
+import argparse
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 warnings.filterwarnings(action='ignore')
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument('-R')
+parser.add_argument('-eps')
+parser.add_argument('-downsample')
+
+args = parser.parse_args()
+print(f'args {args}')
 
 scaler = preprocessing_pipeline = joblib.load(
     './ressources/baseline_scaler.joblib')
@@ -50,7 +60,7 @@ if __name__ == '__main__':
     dimensions = x_clean.shape[1]
     BATCH_SIZE = x_clean.shape[0]
     eps = 0.2
-    downsample = 3
+    downsample = int(args.downsample)
     sampler = Sampler()
     distance = 2
     classifier_path = './ressources/baseline_nn.model'
@@ -59,8 +69,8 @@ if __name__ == '__main__':
     success_rates_l2 = []
     exec_times_l2 = []
 
-    R_values = [81, 243, 390]
-    epsilons = [0.2, 0.25, 0.3]
+    R_values = [int(args.R)]
+    epsilons = [float(args.eps)]
     params = list(product(R_values, epsilons))
     print(params)
     history_dict = dict()
