@@ -29,7 +29,7 @@ class AdversarialProblem(Problem):
         n_var: int,
         y_clean: int,
         classifier: Any,
-        constraints: Union[List[BaseRelationConstraint], None],
+        constraints_executor: Any,
         features_min_max: List,
         scaler: MinMaxScaler,
         configuration: List,
@@ -41,7 +41,7 @@ class AdversarialProblem(Problem):
         self.x_clean = x_clean
         self.y_clean = y_clean
         self.classifier = classifier
-        self.constraints = constraints
+        self.constraints_executor = constraints_executor
         self.features_min_max = features_min_max
         self.n_var = n_var
         self.scaler = scaler
@@ -61,7 +61,7 @@ class AdversarialProblem(Problem):
         super().__init__(
             n_var=self.n_var,
             n_obj=get_nb_objectives(),
-            n_constr=2,
+            n_constr=3,
             xl=xl,
             xu=xu,
         )
@@ -78,10 +78,7 @@ class AdversarialProblem(Problem):
         return dist
 
     def _calculate_constraints(self, x):
-        executor = NumpyConstraintsExecutor(
-            AndConstraint(self.constraints),
-        )
-        return executor.execute(x)
+        return self.constraints_executor.execute(x)
 
     def fix_feature_types(self, adv, x):
         # print(f'adv before {adv}')
@@ -122,11 +119,13 @@ class AdversarialProblem(Problem):
             1, -1)), self.scaler.transform(self.x_clean.reshape(1, -1))) for x_adv in x_adv_fixed])
 
         obj_constraints = self._calculate_constraints(x_adv_fixed)
-        g1 = obj_distance - self.eps
+
+        g1 = obj_distance - 2*self.eps
         g2 = obj_misclassify - 0.5
+        g3 = obj_constraints - 0.0001
 
         F = [obj_misclassify, obj_distance, obj_constraints]
-        G = [g1, g2]
+        G = [g1, g2, g3]
 
         # --- Output
         out["F"] = np.column_stack(F)

@@ -13,24 +13,30 @@ from pymoo.factory import get_crossover, get_mutation, get_problem, get_referenc
 from pymoo.optimize import minimize
 from pymoo.util.nds import fast_non_dominated_sort
 from pymoo.operators.sampling.rnd import FloatRandomSampling
-from utils.tensorflow_classifier import TensorflowClassifier
+from utils.tensorflow_classifier import TensorflowClassifier, BotnetClassifier
 from tensorflow.keras.models import load_model
 from sklearn.pipeline import Pipeline
 from constraints.url_constraints import get_url_relation_constraints
+from constraints.botnet_constraints import get_relation_constraints
 from pymoo.util.nds import fast_non_dominated_sort
 from utils.perturbation_generator import generate_perturbation
+from mlc.datasets.dataset_factory import get_dataset
+from constraints.relation_constraint import AndConstraint
+from constraints.constraints_executor import NumpyConstraintsExecutor
+from ml_wrappers import wrap_model
 import numpy as np
 import os
 import math
 
 
-
 print(f'Hello {os.getpid()} from Hyperband')
+
 
 def run_worker(args):
     sh = SuccessiveHalving(**args)
     all_results = sh.run()
     return all_results
+
 
 @dataclass
 class Hyperband():
@@ -47,25 +53,24 @@ class Hyperband():
     distance: str
     seed: int
 
-
     def generate(self, mutables=None, features_min_max=None, int_features=None):
         if self.downsample <= 1:
             raise ValueError('Downsample must be > 1')
-        
+
         all_scores, all_configurations, all_candidates = [], [], []
         # Number of Hyperband rounds
         s_max = math.floor(math.log(self.R, self.downsample))
         B = self.R * (s_max + 1)
         print(f'Hyperband brackets {s_max + 1}')
-        params = [ 
-            {'objective': self.objective, 
-             'classifier_path': self.classifier_path, 
-             'sampler': self.sampler, 
-             'x': self.x, 'y': self.y, 
-             'eps': self.eps, 
-             'dimensions': self.dimensions, 
-             'max_configuration_size': self.max_configuration_size, 
-             'distance': self.distance, 
+        params = [
+            {'objective': self.objective,
+             'classifier_path': self.classifier_path,
+             'sampler': self.sampler,
+             'x': self.x, 'y': self.y,
+             'eps': self.eps,
+             'dimensions': self.dimensions,
+             'max_configuration_size': self.max_configuration_size,
+             'distance': self.distance,
              'max_ressources_per_configuration': self.R,
              'downsample': self.downsample,
              'mutables': mutables,
@@ -76,18 +81,19 @@ class Hyperband():
              'seed': self.seed,
              'hyperband_bracket': i,
              'R': self.R
-            } 
-            for i in reversed(range(s_max + 1)) 
+             }
+            for i in reversed(range(s_max + 1))
         ]
-        
+
         '''
         p = Pool(os.cpu_count())
         results = p.map(run_worker, params)
         p.close()
         p.join()
         '''
-        
-        results = Parallel(n_jobs=s_max+1, verbose=0, backend='multiprocessing', prefer='processes')(delayed(run_worker)(params[i]) for i in range(s_max + 1))
+
+        results = Parallel(n_jobs=s_max+1, verbose=0, backend='multiprocessing',
+                           prefer='processes')(delayed(run_worker)(params[i]) for i in range(s_max + 1))
         global_scores = []
         global_configs = []
         global_candidates = []
@@ -109,11 +115,22 @@ class Hyperband():
             global_history.extend(history)
             global_misclassifs.extend(history_misclassif)
             global_viols.extend(history_viols)
-        
+
         # Start the RNSGA search for best candidates for each example
-        scaler = joblib.load('./ressources/baseline_scaler.joblib')
-        classifier = Pipeline(steps=[('preprocessing', scaler), ('model', TensorflowClassifier(load_model(self.classifier_path)))])
-        constraints = get_url_relation_constraints()
+        scaler = joblib.load('./ressources/botnet_scaler.joblib')
+        classifier = Pipeline(steps=[('preprocessing', scaler), ('model',
+                                                                 wrap_model(load_model(self.classifier_path), self.x, model_task='classification'))])
+        preds = classifier.predict(self.x)
+        print(f'preds {preds}')
+
+        ds = get_dataset('ctu_13_neris')
+        X, y = ds.get_x_y()
+
+        feature_names = X.columns.to_list()
+        # print(f'columns {X.columns.to_list()}')
+        constraints = get_relation_constraints(X)
+        executor = NumpyConstraintsExecutor(AndConstraint(
+            constraints), feature_names=feature_names)
         final_objectives = []
         sr = 0
         misclassifs = 0
@@ -122,7 +139,9 @@ class Hyperband():
             print(f'Starting Evolution for example {j}')
             k = 0
             best_objectives = []
-            best = np.argmin(np.array(scores))
+            fronts = fast_non_dominated_sort.fast_non_dominated_sort(
+                np.array(scores))
+            best = fronts[0][0]
             best_adv = candidates[best]
             if classifier.predict(self.x[j][np.newaxis, :])[0] != self.y[j] and classifier.predict(best_adv[np.newaxis, :])[0] == self.y[j]:
                 sr += 1
@@ -131,22 +150,22 @@ class Hyperband():
                 best_config = configurations[best]
 
                 problem = AdversarialProblem(
-                    x_clean=self.x[j], 
-                    n_var=len(best_config), 
-                    y_clean=self.y[j], 
-                    classifier=classifier, 
-                    constraints=constraints, 
-                    features_min_max=features_min_max, 
-                    scaler=scaler, 
-                    configuration=best_config, 
-                    int_features=int_features, 
+                    x_clean=self.x[j],
+                    n_var=len(best_config),
+                    y_clean=self.y[j],
+                    classifier=classifier,
+                    constraints_executor=executor,
+                    features_min_max=features_min_max,
+                    scaler=scaler,
+                    configuration=best_config,
+                    int_features=int_features,
                     eps=self.eps
                 )
-                
+
                 ref_points = get_reference_directions(
-                        "energy", problem.n_obj, self.R, seed=1
+                    "energy", problem.n_obj, self.R, seed=1
                 )
-                #ref_points = get_reference_directions('uniform', self.R, problem.n_obj)
+                # ref_points = get_reference_directions('uniform', self.R, problem.n_obj)
                 # get_sampling('real_random')
                 algorithm = RNSGA3(  # population size
                     n_offsprings=100,  # number of offsprings
@@ -158,20 +177,22 @@ class Hyperband():
                     pop_per_ref_point=1,
                 )
 
-                res = minimize(problem, algorithm, termination=('n_gen', 100))
+                res = minimize(problem, algorithm, termination=('n_gen', 1000))
 
                 optimal_solutions = res.pop.get("X")
                 optimal_objectives = res.pop.get("F")
                 optimals = []
-                misclassifs += np.any(np.array([obj[0] for obj in optimal_objectives]) < 0.5)
+                misclassifs += np.any(np.array([obj[0]
+                                      for obj in optimal_objectives]) < 0.5)
                 tolerance = 0.0001
-                viols += np.any(np.array([obj[2] for obj in optimal_objectives]) <= tolerance)
+                viols += np.any(np.array([obj[2]
+                                for obj in optimal_objectives]) <= tolerance)
                 for i in range(len(optimal_solutions)):
-                    #print(f"Objective values {i}: {optimal_objectives[i]}")
+                    # print(f"Objective values {i}: {optimal_objectives[i]}")
                     if optimal_objectives[i][1] <= self.eps:
-                        #print(f"Objective values {i}: {optimal_objectives[i]}")
+                        # print(f"Objective values {i}: {optimal_objectives[i]}")
                         optimals.append(optimal_objectives[i])
-                    #scores.append((sum(optimal_objectives[i]), optimal_solutions[i]))
+                    # scores.append((sum(optimal_objectives[i]), optimal_solutions[i]))
                 if len(optimals) > 0:
                     optimals = sorted(optimals, key=lambda k: k[0])
                     print(f'best objective for example {j} {optimals[0]}')
@@ -247,13 +268,15 @@ class Hyperband():
             if len(best_objectives) > 0:
                 final_objectives.append((best_objectives[0], j))
             '''
-        
+
         print(f'final objectives across all examples {final_objectives}')
         cr = (classifier.predict(self.x) == 1).astype('int').sum()
         for i, (obj, j) in enumerate(final_objectives):
-            print(f'pred for example {j} : {classifier.predict(self.x[j][np.newaxis, :])[0]}')
+            print(
+                f'pred for example {j} : {classifier.predict(self.x[j][np.newaxis, :])[0]}')
             if classifier.predict(self.x[j][np.newaxis, :])[0] != 1:
-                print(f'pred inside the if for example {j} {classifier.predict(self.x[j][np.newaxis, :])[0]}')
+                print(
+                    f'pred inside the if for example {j} {classifier.predict(self.x[j][np.newaxis, :])[0]}')
                 continue
 
             if obj[0] < 0.5 and obj[2] <= 0.00001:
@@ -263,7 +286,8 @@ class Hyperband():
         print(f'Success rate {(sr / cr ) * 100 }%')
         print(f'Misclassifs {(misclassifs / cr ) * 100 }%')
         print(f'Violations {(viols / cr ) * 100 }%')
-        history = {(self.R, self.eps) : {'M': (misclassifs / cr ) * 100, 'C&M': (sr / cr ) * 100, 'C': (viols / cr ) * 100 }}
+        history = {(self.R, self.eps): {'M': (misclassifs / cr) *
+                                        100, 'C&M': (sr / cr) * 100, 'C': (viols / cr) * 100}}
         print(f'history {history}')
 
         # for b in zip(*results):
@@ -275,23 +299,19 @@ class Hyperband():
         #     global_scores.append(scores)
         #     global_configs.append(configs)
         #     global_candidates.append(candidates)
-        
-        #print(f'len global_scores[0] {len(global_scores[0])}')
 
+        # print(f'len global_scores[0] {len(global_scores[0])}')
 
-        #for thread in zip(*results):
-
-        
+        # for thread in zip(*results):
 
         # for (scores, configurations, candidates) in results:
         #     all_scores.extend(scores)
         #     all_configurations.extend(configurations)
         #     all_candidates.extend(candidates)
-        
-        
-        #res = processes[0].run()
-        #res1 = processes[1].run()
-        
+
+        # res = processes[0].run()
+        # res1 = processes[1].run()
+
         '''
         for p in processes:
             scores, configurations, candidates = p.run()
@@ -333,7 +353,5 @@ class Hyperband():
             all_configurations.extend(configurations)
             all_candidates.extend(candidates)
             '''
-        #print(f'global history {global_history}')
+        # print(f'global history {global_history}')
         return global_scores, global_configs, global_candidates, global_history, global_misclassifs, global_viols
-
-
