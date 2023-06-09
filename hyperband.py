@@ -158,7 +158,7 @@ class Hyperband():
                     pop_per_ref_point=1,
                 )
 
-                res = minimize(problem, algorithm, termination=('n_gen', 100))
+                res = minimize(problem, algorithm, termination=('n_gen', 250))
 
                 optimal_solutions = res.pop.get("X")
                 optimal_objectives = res.pop.get("F")

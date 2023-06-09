@@ -76,7 +76,7 @@ if __name__ == '__main__':
     # Parameters for Hyperband
     dimensions = X_test.shape[1]
     BATCH_SIZE = x_clean.shape[0]
-    eps = 0.3
+    eps = 0.2
     downsample = 3
     sampler = Sampler()
     distance = 2
