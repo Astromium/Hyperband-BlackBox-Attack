@@ -14,7 +14,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler
 from ml_wrappers import wrap_model
 import joblib
-preprocessing_pipeline = joblib.load('./ressources/baseline_scaler.joblib')
+preprocessing_pipeline = joblib.load('./ressources/custom_lcld_scaler.joblib')
 
 class SuccessiveHalving():
     def __init__(self, objective: Evaluator,
