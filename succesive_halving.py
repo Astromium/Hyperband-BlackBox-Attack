@@ -55,7 +55,8 @@ class SuccessiveHalving():
         self.hyperband_bracket = hyperband_bracket
         self.R = R
         self.classifier_path = classifier_path
-        self.classifier = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', TensorflowClassifier(load_model(self.classifier_path)))])
+        #self.classifier = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', TensorflowClassifier(load_model(self.classifier_path)))])
+        self.classifier = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', wrap_model(load_model(self.classifier_path), self.x, model_task='classification'))])
     
     def process_one(self, candidate, idx, configuration, budget, history, history_mis, history_vio):
         new_score, new_candidate, misclassif, viol = self.objective.evaluate(
