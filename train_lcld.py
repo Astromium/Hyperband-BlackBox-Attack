@@ -6,33 +6,32 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from mlc.datasets.dataset_factory import get_dataset
 from keras.layers import Input, Dropout, Dense, Activation
+import joblib
 
 print(tf.__version__)
 
 def create_dnn(units, input_dims, optimizer, loss):
     model = Sequential()
     model.add(Input(shape=(50)))
-    model.add(Dense(units=units[0], activation='relu', input_dim=(50)))
-    model.add(Dropout(0.1))
+    model.add(Dense(units=units[0], activation='relu'))
     model.add(Dense(units=units[1], activation='relu'))
-    model.add(Dropout(0.1))
     model.add(Dense(units=units[2], activation='relu'))
-    model.add(Dense(units=2))
-    model.add(Activation('softmax'))
+    model.add(Dense(units=2, activation='softmax'))
+    #model.add(Activation('softmax'))
     
-    model.compile(optimizer=optimizer, loss=loss, metrics=[tf.keras.metrics.BinaryAccuracy()])
+    model.compile(optimizer=optimizer, loss=loss, metrics=['accuracy', tf.keras.metrics.Recall(), tf.keras.metrics.AUC()])
     return model
 
-opt = keras.optimizers.Adam()
+opt = keras.optimizers.SGD()
 loss = keras.losses.CategoricalCrossentropy()
 
-LAYERS = [128, 64, 32]
+LAYERS = [64, 32, 16]
 INPUT_DIMS = [64, 1, 756]
 
 model = create_dnn(units=LAYERS, input_dims=INPUT_DIMS, optimizer=opt, loss=loss)
 print(model.summary())
 
-ds = get_dataset('lcld_v2_time')
+ds = get_dataset('lcld_v2_iid')
 splits = ds.get_splits()
 
 x, y = ds.get_x_y()
@@ -41,7 +40,10 @@ categorical = ['home_ownership', 'verification_status', 'purpose', 'initial_list
 encoded_df = pd.get_dummies(x, columns=categorical)
 encoded_df = encoded_df.to_numpy()
 x_train, y_train = encoded_df[splits['train']], y[splits['train']]
+charged_off = np.where(y_train == 1)[0]
 x_val, y_val = encoded_df[splits['val']], y[splits['val']]
+charged_off = np.where(y_val == 1)[0]
+print(f'class 0 : {y_val[~charged_off].size} , class 1 : {y_val[charged_off].size}')
 x_test, y_test = encoded_df[splits['test']], y[splits['test']]
 
 print(f'train dataset {x_train.shape}')
@@ -70,3 +72,4 @@ acc = accuracy_score(y_test, classes)
 print(f'acc {acc}')
 
 model.save('./ressources/custom_lcld_model.h5')
+joblib.dump(scaler, './ressources/custom_lcld_scaler.joblib')

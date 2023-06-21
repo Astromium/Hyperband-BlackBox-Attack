@@ -24,7 +24,7 @@ from itertools import product
 from mlc.datasets.dataset_factory import get_dataset
 import tensorflow as tf
 warnings.filterwarnings(action='ignore')
-#tf.compat.v1.disable_eager_execution()
+tf.compat.v1.disable_eager_execution()
 scaler = preprocessing_pipeline = joblib.load('./ressources/custom_lcld_scaler.joblib')
 
 
@@ -61,7 +61,7 @@ if __name__ == '__main__':
 
 
     
-    ds = get_dataset('lcld_v2_time')
+    ds = get_dataset('lcld_v2_iid')
     splits = ds.get_splits()
     x, y = ds.get_x_y()
     feature_names = x.columns.to_list()
@@ -95,13 +95,21 @@ if __name__ == '__main__':
     executor = NumpyConstraintsExecutor(AndConstraint(constraints), feature_names=feature_names)
     # Parameters for Hyperband
     dimensions = x_charged_off.shape[1] if mutables is None else len(mutables)
-    BATCH_SIZE = 2#x_charged_off.shape[0]
     eps = 0.2
     downsample = 3
     sampler = Sampler()
     distance = 2
     classifier_path = './ressources/custom_lcld_model.h5'
-    #model = tf.keras.models.load_model(classifier_path)
+    model = tf.keras.models.load_model(classifier_path)
+    model_pipeline = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', model)])
+    preds = model_pipeline.predict(x_charged_off)
+    classes = np.argmax(preds, axis=1)
+    print(f'preds {classes}')
+    to_keep = np.where(classes == 1)[0]
+    print(f'Correct {to_keep.size}')
+    x_charged_off_correct, y_charged_off_correct = x_charged_off[to_keep], y_charged_off[to_keep]
+    print(f'shape of test set {x_charged_off_correct.shape}') 
+    BATCH_SIZE = x_charged_off_correct.shape[0]
     #print(model.summary())
     seed = 202374
     #np.random.seed(seed)
@@ -143,15 +151,16 @@ if __name__ == '__main__':
     '''
         
     for (R, eps) in params:
-        url_evaluator = TorchEvaluator(constraints=constraints, scaler=scaler, alpha=1.0, beta=1.0)
+        url_evaluator = TorchEvaluator(constraints=None, scaler=scaler, alpha=1.0, beta=1.0, feature_names=feature_names)
         scores, configs, candidates = [], [], []
         start = timeit.default_timer()
         
-        hp = Hyperband(objective=url_evaluator, classifier_path=classifier_path, x=x_charged_off[:BATCH_SIZE], y=y_charged_off[:BATCH_SIZE], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=downsample, distance=distance, seed=seed)
+        hp = Hyperband(objective=url_evaluator, classifier_path=classifier_path, x=x_charged_off_correct[:BATCH_SIZE], y=y_charged_off_correct[:BATCH_SIZE], sampler=sampler, eps=eps, dimensions=dimensions, max_configuration_size=dimensions-1, R=R, downsample=downsample, distance=distance, seed=seed)
         profiler = cProfile.Profile()
         profiler.enable()
         scores, configs, candidates, _, _, _ = hp.generate(mutables=mutables, features_min_max=(min_constraints,max_constraints), int_features=int_features)
         profiler.disable()
+        #print(f'scores {scores}')
         #stats = pstats.Stats(profiler).sort_stats(pstats.SortKey.TIME)
         #stats.print_stats()
         #stats.dump_stats('results.prof')
@@ -160,12 +169,12 @@ if __name__ == '__main__':
         print(f'Exec time {round((end - start) / 60, 3)}')
         #model_tf = TensorflowClassifier(load_model(classifier_path))
         model_tf = tf.keras.models.load_model(classifier_path)
-        model_pipeline = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', wrap_model(model_tf, x_charged_off[:BATCH_SIZE], model_task='classification'))])
-        success_rate_calculator = TorchCalculator(classifier=model_pipeline, data=x_charged_off[:BATCH_SIZE], labels=y_charged_off[:BATCH_SIZE], scores=np.array(scores), candidates=candidates, scaler=scaler, eps=eps)
+        model_pipeline = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', wrap_model(model_tf, x_charged_off_correct[:BATCH_SIZE], model_task='classification'))])
+        success_rate_calculator = TorchCalculator(classifier=model_pipeline, data=x_charged_off_correct[:BATCH_SIZE], labels=y_charged_off_correct[:BATCH_SIZE], scores=np.array(scores), candidates=candidates, scaler=scaler, eps=eps)
         success_rate, best_candidates, adversarials = success_rate_calculator.evaluate()
         print(f'success rate {success_rate}, len best_candidates {len(best_candidates)}, len adversarials {len(adversarials)}')
         #adversarials, best_candidates = scaler.inverse_transform(np.array(adversarials)), scaler.inverse_transform(np.array(best_candidates))
-
+        np.save('./adversarials_lcld.npy', np.array(adversarials))
         violations = np.array([executor.execute(adv[np.newaxis, :])[0] for adv in adversarials])
         violations_candidates = np.array([executor.execute(adv[np.newaxis, :])[0] for adv in best_candidates])
         tolerance = 0.0001

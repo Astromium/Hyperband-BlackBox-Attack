@@ -73,7 +73,7 @@ class TorchCalculator(SuccessRateCalculator):
             best_candidates.append(best_candidate)
 
             if pred != y and dist <= self.eps:
-                #print(f'adversarial {i}')
+                print(f'adversarial {i}')
                 adversarials.append(best_candidate)
                 success_rate += 1
         eps = 0.0001 if correct == 0 else 0

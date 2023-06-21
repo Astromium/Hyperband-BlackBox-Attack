@@ -66,10 +66,10 @@ class TfEvaluator(Evaluator):
         return round(best_score, 3), best_adversarial
     
 class TorchEvaluator(Evaluator):
-    def __init__(self, constraints: Union[List[BaseRelationConstraint], None], scaler: Union[MinMaxScaler, None], alpha: float, beta: float):
+    def __init__(self, constraints: Union[List[BaseRelationConstraint], None], scaler: Union[MinMaxScaler, None], alpha: float, beta: float, feature_names: List[str]):
         super().__init__()
         self.constraints = constraints
-        self.constraint_executor = NumpyConstraintsExecutor(AndConstraint(constraints)) if constraints is not None else None
+        self.constraint_executor = NumpyConstraintsExecutor(AndConstraint(constraints), feature_names=feature_names) if constraints is not None else None
         self.scaler = scaler
         self.alpha = alpha
         self.beta = beta
@@ -128,13 +128,13 @@ class TorchEvaluator(Evaluator):
                 adv_scaled = x_scaled + (adv_scaled - x_scaled) * eps / dist
                 # transform back to pb space    
                 adv = self.scaler.inverse_transform(adv_scaled[np.newaxis, :])[0]
-           
+            dist = np.linalg.norm(adv_scaled - x_scaled, ord=distance)
+            #print(f'dist after clipping {dist}')
             # clipping
-            adv = np.clip(adv, features_min_max[0], features_min_max[1])
+            #adv = np.clip(adv, features_min_max[0], features_min_max[1])
             # casting
-            adv = self.fix_feature_types(
-                perturbation=perturbation, adv=adv, int_features=int_features, configuration=configuration)
-            
+            #adv = self.fix_feature_types(
+                #perturbation=perturbation, adv=adv, int_features=int_features, configuration=configuration)
             pred = classifier.predict_proba(adv[np.newaxis, :])[0]
             if self.constraints : 
                 violations = self.constraint_executor.execute(adv[np.newaxis, :])[0]
