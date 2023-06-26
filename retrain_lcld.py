@@ -49,31 +49,29 @@ x_train, y_train = x.iloc[splits['train']], y[splits['train']]
 x_test, y_test = x.iloc[splits['test']], y[splits['test']]
 x_val, y_val = x.iloc[splits['val']], y[splits['val']]
 
+x_train = x_train.to_numpy()
+
+adversarials = np.load('./adversarials_lcld.npy')
+y_adv = np.zeros((adversarials.shape[0],))
+
 #x_train, y_train = encoded_df[splits['train']], y[splits['train']]
 
 #x_val, y_val = encoded_df[splits['val']], y[splits['val']]
 
 #x_test, y_test = encoded_df[splits['test']], y[splits['test']]
-
 print(f'train dataset {x_train.shape}')
+augmented_x_train = np.concatenate((x_train, adversarials))
+print(f'augmented train dataset {augmented_x_train.shape}')
 print(f'test dataset {x_test.shape}')
 print(f'validation dataset {x_val.shape}')
 
 num_transformer = MinMaxScaler()
 cat_transformer = OneHotEncoder(sparse=False)
 
-preprocessor = ColumnTransformer(
-    transformers=[
-        ('num', num_transformer, num_indices),
-        ('cat', cat_transformer, cat_indices)
-    ]
-)
+preprocessor = joblib.load('./ressources/lcld_preprocessor.joblib')
 
-preprocessor.fit(x)
-joblib.dump(preprocessor, './ressources/lcld_preprocessor.joblib')
-
-x_train = preprocessor.transform(x_train)
-print(x_train.shape)
+augmented_x_train = preprocessor.transform(augmented_x_train)
+print(augmented_x_train.shape)
 x_val = preprocessor.transform(x_val)
 print(x_val.shape)
 x_test = preprocessor.transform(x_test)
@@ -83,7 +81,7 @@ print(x_test.shape)
 
 from tensorflow.keras.utils import to_categorical
 
-history = model.fit(x_train, to_categorical(y_train), epochs=10, validation_data=(x_val, to_categorical(y_val)))
+history = model.fit(augmented_x_train, to_categorical(np.concatenate((y_train, y_adv))), epochs=10, validation_data=(x_val, to_categorical(y_val)))
 
 evaluation = model.evaluate(x_test, to_categorical(y_test))
 print(f'Evaluation : {evaluation}')
@@ -98,5 +96,4 @@ print(f'roc {roc}')
 acc = accuracy_score(y_test, classes)
 print(f'acc {acc}')
 
-model.save('./ressources/custom_lcld_model.h5')
-#joblib.dump(scaler, './ressources/custom_lcld_scaler.joblib')
+model.save('./ressources/adv_lcld_model.h5')

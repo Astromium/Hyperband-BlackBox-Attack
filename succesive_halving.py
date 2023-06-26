@@ -8,13 +8,14 @@ from numpy.typing import NDArray
 from sampler import Sampler
 from evaluators import Evaluator
 from utils.perturbation_generator import generate_perturbation
-from utils.tensorflow_classifier import TensorflowClassifier
+from utils.tensorflow_classifier import LcldTensorflowClassifier
 from tensorflow.keras.models import load_model
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler
 from ml_wrappers import wrap_model
+from pymoo.util.nds import fast_non_dominated_sort
 import joblib
-preprocessing_pipeline = joblib.load('./ressources/custom_lcld_scaler.joblib')
+preprocessing_pipeline = joblib.load('./ressources/lcld_preprocessor.joblib')
 
 class SuccessiveHalving():
     def __init__(self, objective: Evaluator,
@@ -56,7 +57,7 @@ class SuccessiveHalving():
         self.R = R
         self.classifier_path = classifier_path
         #self.classifier = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', TensorflowClassifier(load_model(self.classifier_path)))])
-        self.classifier = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', wrap_model(load_model(self.classifier_path), self.x, model_task='classification'))])
+        self.classifier = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', LcldTensorflowClassifier(load_model(classifier_path)))])
     
     def process_one(self, candidate, idx, configuration, budget, history, history_mis, history_vio):
         new_score, new_candidate, misclassif, viol = self.objective.evaluate(
@@ -157,7 +158,17 @@ class SuccessiveHalving():
                 
                 scores = [r[0] for r in results]
                 candidates = [r[1] for r in results]
-                top_indices = np.argsort(scores)[:max(int(len(scores) / self.downsample), 1)]
+                fronts = fast_non_dominated_sort.fast_non_dominated_sort(
+                    np.array(scores))
+                # top_indices = np.argsort(scores)[:max(
+                #     int(len(scores) / self.downsample), 1)]
+                flattened = []
+                for front in fronts:
+                    for v in front:
+                        flattened.append(v)
+                top_indices = flattened[:max(
+                    int(len(scores) / self.downsample), 1)]
+                # print(f'top indices {top_indices}')
                 configurations = [configurations[j] for j in top_indices]
                 candidates = [candidates[j] for j in top_indices]
                 scores = [scores[j] for j in top_indices]

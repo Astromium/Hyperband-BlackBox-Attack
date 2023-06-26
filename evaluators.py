@@ -8,6 +8,7 @@ from constraints.constraints_executor import NumpyConstraintsExecutor
 from constraints.relation_constraint import AndConstraint
 from sklearn.preprocessing import MinMaxScaler
 from utils.mutation_generator import generate_mutations
+from pymoo.util.nds import fast_non_dominated_sort
 import numpy as np
 import math
 
@@ -69,7 +70,8 @@ class TorchEvaluator(Evaluator):
     def __init__(self, constraints: Union[List[BaseRelationConstraint], None], scaler: Union[MinMaxScaler, None], alpha: float, beta: float, feature_names: List[str]):
         super().__init__()
         self.constraints = constraints
-        self.constraint_executor = NumpyConstraintsExecutor(AndConstraint(constraints), feature_names=feature_names) if constraints is not None else None
+        self.constraint_executor = NumpyConstraintsExecutor(
+            AndConstraint(constraints), feature_names=feature_names) if constraints is not None else None
         self.scaler = scaler
         self.alpha = alpha
         self.beta = beta
@@ -85,15 +87,16 @@ class TorchEvaluator(Evaluator):
         xm = np.clip(xm, features_min_max[0], features_min_max[1])
         # casting
         xm[int_features] = xm[int_features].astype('int')
-            
+
         pred = classifier.predict_proba(xm[np.newaxis, :])[0]
         violations = self.constraint_executor.execute(xm[np.newaxis, :])[0]
         return (self.alpha * pred[y] + self.beta * violations, np.copy(xm))
 
-
     def evaluate_mutations(self, classifier: Any, configuration: tuple, budget: int, x: NDArray, y: int, eps: float, distance: str, features_min_max: Union[tuple, None], int_features: Union[NDArray, None], generate_perturbation: Callable, history: Dict, candidate: NDArray):
-        mutations = generate_mutations(pop_size=budget, features_min_max=features_min_max, x=x)
-        scores = [self.process_mutant(xm=mutant, x=x, y=y, features_min_max=features_min_max, int_features=int_features, classifier=classifier) for mutant in mutations]
+        mutations = generate_mutations(
+            pop_size=budget, features_min_max=features_min_max, x=x)
+        scores = [self.process_mutant(xm=mutant, x=x, y=y, features_min_max=features_min_max,
+                                      int_features=int_features, classifier=classifier) for mutant in mutations]
         scores = sorted(scores, key=lambda k: k[0])
         return round(scores[0][0], 3), scores[0][1], 0, 0
 
@@ -102,47 +105,112 @@ class TorchEvaluator(Evaluator):
             if c in int_features:
                 adv[c] = math.ceil(
                     adv[c]) if perturbation[i] < 0 else math.floor(adv[c])
-        return adv   
-        
-    
+        return adv
+
+    def process_one(self, p, x, configuration, distance, eps, features_min_max, int_features):
+        adv = np.copy(x)
+        adv[list(configuration)] += p
+        '''
+        adv_scaled = self.scaler.transform(adv[np.newaxis, :])[0]
+        x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
+        dist = np.linalg.norm(adv_scaled - x_scaled, ord=distance)
+        # print(f'dist before projection {dist}')
+        if dist > eps:
+            adv_scaled = x_scaled + (adv_scaled - x_scaled) * eps / dist
+            # transform back to pb space
+            adv = self.scaler.inverse_transform(
+                adv_scaled[np.newaxis, :])[0]
+        '''
+        adv = np.clip(adv, features_min_max[0], features_min_max[1])
+        adv = self.fix_feature_types(
+            perturbation=p, adv=adv, int_features=int_features, configuration=configuration)
+
+        return adv
+
     def evaluate(self, classifier: Any, configuration: tuple, budget: int, x: NDArray, y: int, eps: float, distance: str, features_min_max: Union[tuple, None], int_features: Union[NDArray, None], generate_perturbation: Callable, history: Dict, candidate: NDArray):
-        score = 0.0
-        best_score = math.inf
-        best_adversarial = None
-        scores = [0] * budget
-        misclassif = [0] * budget
-        viols = [0] * budget
-        if candidate is None:
-            adv = np.copy(x)
+        x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
+        perturbations = [generate_perturbation(
+            configuration=configuration, features_min=features_min_max[0], features_max=features_min_max[1], x=x) for _ in range(budget)]
+        scores, misclassif, viols = [0] * budget, [0] * budget, [0] * budget
+        adversarials = np.array([self.process_one(
+            p, x, configuration, distance, eps, features_min_max, int_features) for p in perturbations])
+        preds = classifier.predict(adversarials)
+        #adversarials_scaled = self.scaler.transform(adversarials)
+        #distances = [np.linalg.norm(adv - x_scaled) for adv in adversarials_scaled]
+        if self.constraints:
+            violations = self.constraint_executor.execute(adversarials)
+            scores = [[p, v] for p, v in zip(preds, violations)]
         else:
-            adv = np.copy(candidate)
-        for i in range(budget):
-            #perturbation = generate_perturbation(shape=np.array(configuration).shape, eps=eps, distance=distance)
-            perturbation = generate_perturbation(configuration=configuration, features_min=features_min_max[0], features_max=features_min_max[1], x=x)
-            adv[list(configuration)] += perturbation
-            
-            adv_scaled = self.scaler.transform(adv[np.newaxis, :])[0]
-            x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
-            dist = np.linalg.norm(adv_scaled - x_scaled, ord=distance)
-            if dist > eps:
-                adv_scaled = x_scaled + (adv_scaled - x_scaled) * eps / dist
-                # transform back to pb space    
-                adv = self.scaler.inverse_transform(adv_scaled[np.newaxis, :])[0]
-            dist = np.linalg.norm(adv_scaled - x_scaled, ord=distance)
-            #print(f'dist after clipping {dist}')
-            # clipping
-            #adv = np.clip(adv, features_min_max[0], features_min_max[1])
-            # casting
-            #adv = self.fix_feature_types(
-                #perturbation=perturbation, adv=adv, int_features=int_features, configuration=configuration)
-            pred = classifier.predict_proba(adv[np.newaxis, :])[0]
-            if self.constraints : 
-                violations = self.constraint_executor.execute(adv[np.newaxis, :])[0]
-                scores[i] = (self.alpha * pred[y] + self.beta * violations, np.copy(adv)) 
-            else:
-                scores[i] = (self.alpha * pred[y], np.copy(adv)) 
-           
-            '''
+            #scores = [[p, d] for p, d in zip(preds, distances)]
+            scores = preds
+
+        fronts = fast_non_dominated_sort.fast_non_dominated_sort(
+            np.array(scores))
+        return scores[fronts[0][0]], adversarials[fronts[0][0]], misclassif[0], viols[0]
+
+        # for i, p in enumerate(perturbations):
+        #     adv = np.copy(x)
+        #     adv[list(configuration)] += p
+        #     adv_scaled = self.scaler.transform(adv[np.newaxis, :])[0]
+        #     x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
+        #     dist = np.linalg.norm(adv_scaled - x_scaled, ord=distance)
+        #     # print(f'dist before projection {dist}')
+        #     if dist > eps:
+        #         adv_scaled = x_scaled + (adv_scaled - x_scaled) * eps / dist
+        #         # transform back to pb space
+        #         adv = self.scaler.inverse_transform(
+        #             adv_scaled[np.newaxis, :])[0]
+        #     adv = np.clip(adv, features_min_max[0], features_min_max[1])
+        #     adv = self.fix_feature_types(
+        #         perturbation=p, adv=adv, int_features=int_features, configuration=configuration)
+        #     pred = classifier.predict_proba(adv[np.newaxis, :])[0]
+        #     violations = self.constraint_executor.execute(adv[np.newaxis, :])[
+        #         0]
+        #     scores[i] = (self.alpha * pred[y], np.copy(adv))
+
+        # scores = [0] * budget
+        # misclassif = [0] * budget
+        # viols = [0] * budget
+        # if candidate is None:
+        #     adv = np.copy(x)
+        # else:
+        #     adv = np.copy(candidate)
+        # for i in range(budget):
+        #     # perturbation = generate_perturbation(shape=np.array(configuration).shape, eps=eps, distance=distance)
+        #     perturbation = generate_perturbation(
+        #         configuration=configuration, features_min=features_min_max[0], features_max=features_min_max[1], x=x)
+        #     adv[list(configuration)] += perturbation
+
+        #     adv_scaled = self.scaler.transform(adv[np.newaxis, :])[0]
+        #     x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
+        #     dist = np.linalg.norm(adv_scaled - x_scaled, ord=distance)
+        #     if dist > eps:
+        #         adv_scaled = x_scaled + (adv_scaled - x_scaled) * eps / dist
+        #         # transform back to pb space
+        #         adv = self.scaler.inverse_transform(
+        #             adv_scaled[np.newaxis, :])[0]
+
+        #     # clipping
+        #     adv = np.clip(adv, features_min_max[0], features_min_max[1])
+        #     # casting
+        #     adv = self.fix_feature_types(
+        #         perturbation=perturbation, adv=adv, int_features=int_features, configuration=configuration)
+
+        #     pred = classifier.predict_proba(adv[np.newaxis, :])[0]
+        #     if self.constraints:
+        #         # print('Calculating violations')
+        #         start = timeit.default_timer()
+        #         violations = self.constraint_executor.execute(adv[np.newaxis, :])[
+        #             0]
+        #         end = timeit.default_timer()
+        #         print(f'violations took {(end - start)}')
+        #         # print('Done Calculating violations')
+        #         scores[i] = (self.alpha * pred[y] + self.beta *
+        #                      violations, np.copy(adv))
+        #     else:
+        #         scores[i] = (self.alpha * pred[y], np.copy(adv))
+
+        '''
             if score < best_score:
                 print('New score')
                 dist1 = np.linalg.norm(x - adv)
@@ -152,16 +220,12 @@ class TorchEvaluator(Evaluator):
                 dist1 = np.linalg.norm(x - best_adversarial)
                 print(f'dist after assignement {dist1}')
             '''
-            
-            #dist = np.linalg.norm(best_adversarial - x, ord=distance)
-            #print(f'dist of best {dist}')
-            #if dist > eps:
-                #best_adversarial = x + (best_adversarial - x) * eps / dist
+
+        # dist = np.linalg.norm(best_adversarial - x, ord=distance)
+        # print(f'dist of best {dist}')
+        # if dist > eps:
+        # best_adversarial = x + (best_adversarial - x) * eps / dist
         scores = sorted(scores, key=lambda k: k[0])
-        misclassif = sorted(misclassif)
-        viols = sorted(viols)
-        #dist = np.linalg.norm(x - best_adversarial, ord=distance)
-        #print(f'dist before returning {dist}')
         return round(scores[0][0], 3), scores[0][1], misclassif[0], viols[0]
     
 class SickitEvaluator(Evaluator):
