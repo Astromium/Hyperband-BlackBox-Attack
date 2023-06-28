@@ -62,7 +62,7 @@ if __name__ == '__main__':
     downsample = 3
     sampler = Sampler()
     distance = 2
-    classifier_path = './ressources/adv_lcld_model.h5'
+    classifier_path = './ressources/custom_lcld_model.h5'
     model = tf.keras.models.load_model(classifier_path)
     model_pipeline = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', model)])
     preds = model_pipeline.predict(x_charged_off)

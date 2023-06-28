@@ -38,10 +38,14 @@ splits = ds.get_splits()
 x, y = ds.get_x_y()
 
 categorical = ['home_ownership', 'verification_status', 'purpose', 'initial_list_status', 'application_type']
-cat_indices = [x.columns.get_loc(col) for col in categorical]
+
 #x[categorical] = x[categorical].astype(str)
-numerical = [col for col in x.columns if col not in categorical]
+
 num_indices = [x.columns.get_loc(col) for col in numerical]
+col_order = list(numerical) + list(categorical)
+x = x[col_order]
+cat_indices = [x.columns.get_loc(col) for col in categorical]
+numerical = [col for col in x.columns if col not in categorical]
 print(f'cat indices {cat_indices}')
 #encoded_df = pd.get_dummies(x, columns=categorical)
 #encoded_df = encoded_df.to_numpy()
