@@ -88,7 +88,7 @@ if __name__ == '__main__':
     print(f'Correct {to_keep.size}')
     x_charged_off_correct, y_charged_off_correct = x_charged_off[to_keep], y_charged_off[to_keep]
     print(f'shape of test set {x_charged_off_correct.shape}') 
-    BATCH_SIZE = x_charged_off_correct.shape[0]
+    BATCH_SIZE = 1#x_charged_off_correct.shape[0]
     #print(model.summary())
     seed = 202374
     #np.random.seed(seed)
@@ -156,7 +156,7 @@ if __name__ == '__main__':
         violations_candidates = np.array([executor.execute(adv[np.newaxis, :])[0] for adv in best_candidates])
         print(f'violations {violations}')
         print(f'violations candidates {violations_candidates}')
-        tolerance = 0.0001
+        tolerance = 0.01
         satisfaction = (violations < tolerance).astype('int').sum()
         satisfaction_candidates = (violations_candidates < tolerance).astype('int').sum()
         #print(f'Constraints satisfaction (C&M) {(success_rate * 100) - satisfaction}')

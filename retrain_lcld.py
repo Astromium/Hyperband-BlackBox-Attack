@@ -38,10 +38,14 @@ splits = ds.get_splits()
 x, y = ds.get_x_y()
 
 categorical = ['home_ownership', 'verification_status', 'purpose', 'initial_list_status', 'application_type']
-cat_indices = [x.columns.get_loc(col) for col in categorical]
+
 #x[categorical] = x[categorical].astype(str)
+
 numerical = [col for col in x.columns if col not in categorical]
 num_indices = [x.columns.get_loc(col) for col in numerical]
+col_order = list(numerical) + list(categorical)
+x = x[col_order]
+cat_indices = [x.columns.get_loc(col) for col in categorical]
 print(f'cat indices {cat_indices}')
 #encoded_df = pd.get_dummies(x, columns=categorical)
 #encoded_df = encoded_df.to_numpy()
@@ -49,9 +53,20 @@ x_train, y_train = x.iloc[splits['train']], y[splits['train']]
 x_test, y_test = x.iloc[splits['test']], y[splits['test']]
 x_val, y_val = x.iloc[splits['val']], y[splits['val']]
 
+#x_train, y_train = encoded_df[splits['train']], y[splits['train']]
+
+#x_val, y_val = encoded_df[splits['val']], y[splits['val']]
+
+#x_test, y_test = encoded_df[splits['test']], y[splits['test']]
+
+print(f'train dataset {x_train.shape}')
+print(f'test dataset {x_test.shape}')
+print(f'validation dataset {x_val.shape}')
+
 x_train = x_train.to_numpy()
 
 adversarials = np.load('./adversarials_lcld.npy')
+print(f'shape of adversarials {adversarials.shape}')
 y_adv = np.zeros((adversarials.shape[0],))
 
 #x_train, y_train = encoded_df[splits['train']], y[splits['train']]
