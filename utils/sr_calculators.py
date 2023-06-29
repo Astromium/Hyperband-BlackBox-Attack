@@ -76,7 +76,7 @@ class TorchCalculator(SuccessRateCalculator):
             pred = self.classifier.predict(best_candidate[np.newaxis, :])[0]
             best_candidates.append(best_candidate)
 
-            if pred != y:
+            if pred != y and dist <= self.eps:
                 #print(f'adversarial {i}')
                 adversarials.append(best_candidate)
                 success_rate += 1

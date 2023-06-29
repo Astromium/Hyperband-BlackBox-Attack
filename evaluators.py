@@ -10,6 +10,7 @@ from sklearn.preprocessing import MinMaxScaler
 from utils.mutation_generator import generate_mutations
 from pymoo.util.nds import fast_non_dominated_sort
 import numpy as np
+from utils.inverse_transform import inverse_transform
 import math
 
 @dataclass
@@ -110,20 +111,23 @@ class TorchEvaluator(Evaluator):
     def process_one(self, p, x, configuration, distance, eps, features_min_max, int_features):
         adv = np.copy(x)
         adv[list(configuration)] += p
-        '''
+        
+        adv = self.fix_feature_types(
+            perturbation=p, adv=adv, int_features=int_features, configuration=configuration)
+
         adv_scaled = self.scaler.transform(adv[np.newaxis, :])[0]
         x_scaled = self.scaler.transform(x[np.newaxis, :])[0]
         dist = np.linalg.norm(adv_scaled - x_scaled, ord=distance)
+        start = self.scaler.transformers_[1][2][0]
         # print(f'dist before projection {dist}')
         if dist > eps:
             adv_scaled = x_scaled + (adv_scaled - x_scaled) * eps / dist
+            adv_scaled[start:] = list(map(int, adv_scaled[start:]))
             # transform back to pb space
-            adv = self.scaler.inverse_transform(
-                adv_scaled[np.newaxis, :])[0]
-        '''
+            adv = inverse_transform(preprocessor=self.scaler, x=adv_scaled)
+        
         adv = np.clip(adv, features_min_max[0], features_min_max[1])
-        adv = self.fix_feature_types(
-            perturbation=p, adv=adv, int_features=int_features, configuration=configuration)
+        
 
         return adv
 

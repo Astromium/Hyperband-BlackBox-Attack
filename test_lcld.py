@@ -34,7 +34,19 @@ if __name__ == '__main__':
     ds = get_dataset('lcld_v2_iid')
     splits = ds.get_splits()
     x, y = ds.get_x_y()
+
+    categorical = ['home_ownership', 'verification_status', 'purpose', 'initial_list_status', 'application_type']
+
+#x[categorical] = x[categorical].astype(str)
+
+    numerical = [col for col in x.columns if col not in categorical]
+    num_indices = [x.columns.get_loc(col) for col in numerical]
+    col_order = list(numerical) + list(categorical)
+    x = x[col_order]
     feature_names = x.columns.to_list()
+    cat_indices = [x.columns.get_loc(col) for col in categorical]
+    print(f'cat indices {cat_indices}')
+
     x = x.to_numpy()
     x_test, y_test = x[splits['test']], y[splits['test']]
     charged_off = np.where(y_test == 1)[0]
@@ -42,12 +54,16 @@ if __name__ == '__main__':
     #x_clean = scaler.transform(x_clean)
 
     #model_pipeline = Pipeline(steps=[('preprocessing', preprocessing_pipeline), ('model', rf)])
-    metadata = ds.get_metadata(only_x=True)
+    #metadata = ds.get_metadata(only_x=True)
+    metadata = pd.read_csv('./ressources/lcld_v2_metadata_transformed.csv')
     min_constraints = metadata['min'].to_list()
+    print(f'min constraints {min_constraints}')
     min_constraints = list(map(float, min_constraints))
     max_constraints = metadata['max'].to_list()
+    print(f'max constraints {max_constraints}')
     max_constraints = list(map(float, max_constraints))
     feature_types = metadata['type'].to_list()
+    print(f'features types {feature_types}')
     mutables = metadata.index[metadata['mutable'] == True].tolist()
     print(f'mutables {mutables}')
     int_features = np.where(np.array(feature_types) == 'int')[0]

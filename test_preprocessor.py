@@ -3,10 +3,10 @@ from mlc.datasets.dataset_factory import get_dataset
 import numpy as np
 from sklearn.preprocessing import OneHotEncoder, MinMaxScaler
 from sklearn.compose import ColumnTransformer
+from utils.inverse_transform import inverse_transform
 
 ds = get_dataset('lcld_v2_iid')
 x, y = ds.get_x_y()
-
 categorical = ['home_ownership', 'verification_status', 'purpose', 'initial_list_status', 'application_type']
 
 #x[categorical] = x[categorical].astype(str)
@@ -31,16 +31,38 @@ preprocessor = ColumnTransformer(
 x = x.to_numpy()
 x1 = x[0, :]
 print(f'original cat features of x1 : {x1[cat_indices]}')
+print(f'original num features of x1 : {x1[num_indices]}')
 preprocessor.fit(x)
 x = preprocessor.transform(x)
 
 print(x.shape)
 
 ohe = preprocessor.transformers_[1][1]
+scaler = preprocessor.transformers_[0][1]
 x1 = x[0, :]
 print(f'categories {preprocessor.transformers_[1][1].categories_}')
 print(f'cat features of transformed x1 : {x1[preprocessor.transformers_[1][2][0]:]}')
 
+categories = preprocessor.transformers_[1][1].categories_
+c = preprocessor.transformers_[1][2][0]
+print(f'c {c}')
+maxs = []
+for i in range(len(categories)):
+    arr = x1[c:c+len(categories[i])]
+    maxs.append(np.argmax(arr))
+    c += len(categories[i])
+
+print(f'maxs {maxs}')
+
+num_rescaled = scaler.inverse_transform(x1[:preprocessor.transformers_[1][2][0]].reshape(1, -1))
+print(f'num rescaled {num_rescaled}')
+
+rescaled_x1 = np.concatenate((num_rescaled[0], np.array(maxs)))
+
+print(f'rescaled_x1 {rescaled_x1}')
+
+x1_inv = inverse_transform(preprocessor=preprocessor, x=x1)
+print(f'x1_inv {x1_inv}')    
 '''
 adversarials = np.load('./adversarials_lcld.npy')
 
