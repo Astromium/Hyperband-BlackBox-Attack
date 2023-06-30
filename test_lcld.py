@@ -1,3 +1,4 @@
+from comet_ml import Experiment
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import torch
@@ -30,6 +31,12 @@ scaler = preprocessing_pipeline = joblib.load('./ressources/lcld_preprocessor.jo
 
 if __name__ == '__main__':
     print(f'Hello {os.getpid()} from test_url')
+
+    experiment = Experiment(
+        api_key = "9qGb81dgaYx50GgluprkfFpzo",
+        project_name = "general",
+        workspace="astromium"
+    )
 
     ds = get_dataset('lcld_v2_iid')
     splits = ds.get_splits()
@@ -88,7 +95,7 @@ if __name__ == '__main__':
     print(f'Correct {to_keep.size}')
     x_charged_off_correct, y_charged_off_correct = x_charged_off[to_keep], y_charged_off[to_keep]
     print(f'shape of test set {x_charged_off_correct.shape}') 
-    BATCH_SIZE = 1#x_charged_off_correct.shape[0]
+    BATCH_SIZE = x_charged_off_correct.shape[0]
     #print(model.summary())
     seed = 202374
     #np.random.seed(seed)
@@ -166,6 +173,22 @@ if __name__ == '__main__':
     print(f'History {history_dict}')
     with open('experiments.pkl', 'wb') as f:
         pickle.dump(history_dict, f)
+    '''
+    TOKEN = '6226281849:AAGPr9yPSRBviSDtd3IPhKb2iJ3vpxtmU_M'
+
+    from telegram import Bot
+    bot = Bot(token=TOKEN)
+
+    updates = bot.get_updates()
+    chat_id = updates[-1].message.chat_id
+    '''
+
+    
+
+    experiment.log_metrics(history_dict)
+    experiment.log_asset('./adversarials_lcld.npy')
+
+    experiment.end()
     
     #scores = softmax(model.predict(np.array(adversarials)), axis=1)
     #print(f'scores {scores}')
