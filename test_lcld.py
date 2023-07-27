@@ -1,7 +1,6 @@
 from comet_ml import Experiment
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-import torch
 import numpy as np
 import pandas as pd
 from hyperband import Hyperband
@@ -32,11 +31,11 @@ scaler = preprocessing_pipeline = joblib.load('./ressources/lcld_preprocessor.jo
 if __name__ == '__main__':
     print(f'Hello {os.getpid()} from test_url')
 
-    experiment = Experiment(
-        api_key = "9qGb81dgaYx50GgluprkfFpzo",
-        project_name = "general",
-        workspace="astromium"
-    )
+    # experiment = Experiment(
+    #     api_key = "9qGb81dgaYx50GgluprkfFpzo",
+    #     project_name = "general",
+    #     workspace="astromium"
+    # )
 
     ds = get_dataset('lcld_v2_iid')
     splits = ds.get_splits()
@@ -95,7 +94,7 @@ if __name__ == '__main__':
     print(f'Correct {to_keep.size}')
     x_charged_off_correct, y_charged_off_correct = x_charged_off[to_keep], y_charged_off[to_keep]
     print(f'shape of test set {x_charged_off_correct.shape}') 
-    BATCH_SIZE = x_charged_off_correct.shape[0]
+    BATCH_SIZE = 10#x_charged_off_correct.shape[0]
     #print(model.summary())
     seed = 202374
     #np.random.seed(seed)
@@ -185,10 +184,10 @@ if __name__ == '__main__':
 
     
 
-    experiment.log_metrics(history_dict)
-    experiment.log_asset('./adversarials_lcld.npy')
+    # experiment.log_metrics(history_dict)
+    # experiment.log_asset('./adversarials_lcld.npy')
 
-    experiment.end()
+    # experiment.end()
     
     #scores = softmax(model.predict(np.array(adversarials)), axis=1)
     #print(f'scores {scores}')
